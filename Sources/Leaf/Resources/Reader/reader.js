@@ -19,6 +19,15 @@ class LocalSlice {
     async text() { return new TextDecoder().decode(await this.arrayBuffer()) }
 }
 const parse = html => new DOMParser().parseFromString(html, 'text/html')
+const epubSource = async meta => {
+    const sizes = new Map(meta.entries.map(x => [x.filename, x.size]))
+    return {
+        loadText: async name => sizes.has(name) ? (await fetchOK(entryURL(name))).text() : null,
+        loadBlob: async (name, type) => sizes.has(name) ? new Blob([await (await fetchOK(entryURL(name))).arrayBuffer()], { type }) : null,
+        getSize: name => sizes.get(name) ?? 0,
+        sha1: async text => new Uint8Array(await (await fetchOK(`${base}/sha1?text=${encodeURIComponent(text)}`)).arrayBuffer()),
+    }
+}
 const htmlBook = async (meta, markdown = false) => {
     let paths, contents
     if (meta.format === 'chm') {
@@ -132,13 +141,8 @@ try {
     let book
     if (meta.format === 'chm' || meta.format === 'html' || meta.format === 'markdown') book = await htmlBook(meta, meta.format === 'markdown')
     else if (meta.entries.some(x => /\.opf$/i.test(x.filename)) || meta.name.toLowerCase().endsWith('.epub')) {
-        const { EPUB } = await import('./foliate/epub.js'), sizes = new Map(meta.entries.map(x => [x.filename, x.size]))
-        book = await new EPUB({
-            loadText: async name => sizes.has(name) ? (await fetchOK(entryURL(name))).text() : null,
-            loadBlob: async (name, type) => sizes.has(name) ? new Blob([await (await fetchOK(entryURL(name))).arrayBuffer()], { type }) : null,
-            getSize: name => sizes.get(name) ?? 0,
-            sha1: async text => new Uint8Array(await (await fetchOK(`${base}/sha1?text=${encodeURIComponent(text)}`)).arrayBuffer()),
-        }).init()
+        const { EPUB } = await import('./foliate/epub.js')
+        book = await new EPUB(await epubSource(meta)).init()
     } else if (/\.(fb2|fb2z|fbz|zfb2|fb2\.zip)$/i.test(meta.name)) {
         const { makeFB2 } = await import('./foliate/fb2.js')
         const fb2 = meta.entries.find(x => /\.fb2$/i.test(x.filename))

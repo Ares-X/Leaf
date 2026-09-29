@@ -24,7 +24,7 @@ actor Pages{
     @ObservedObject var state:ReaderState
     let pages:Pages
     @State private var images:[CGImage]=[]
-    @State private var isAnimation=false
+    @State private var animated=false
     @State private var playing=false
     @State private var pinchStart:Double?
     @State private var scale:CGFloat=2
@@ -55,8 +55,8 @@ actor Pages{
             })
         }
         .background(WindowScale(scale:$scale).frame(width:0,height:0))
-        .overlay(alignment:.topTrailing){if isAnimation{Button(playing ? "Pause":"Play"){playing.toggle()}.padding(8)}}
-        .task{isAnimation=await pages.frameDelay(0) != nil;playing=isAnimation}
+        .overlay(alignment:.topTrailing){if animated{Button(playing ? "Pause":"Play"){playing.toggle()}.padding(8)}}
+        .task{animated=await pages.frameDelay(0) != nil;playing=animated}
         .task(id:playing){while playing,!Task.isCancelled,let delay=await pages.frameDelay(state.page){do{try await Task.sleep(nanoseconds:UInt64(delay*1_000_000_000))}catch{return};guard !Task.isCancelled else{return};state.page=(state.page+1)%max(1,state.count)}}
         .onChange(of:state.command.id){_ in handleCommand()}
         .onDisappear{searchGeneration += 1}
