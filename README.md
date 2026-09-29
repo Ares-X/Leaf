@@ -11,7 +11,7 @@ Calibre/unar conversions with mature decoders and a small native shell.
 Open/Finder/drop/recent files; contents; search; page or percentage navigation;
 zoom; actual/fit page/fit width; paged/continuous; two-page and right-to-left reading; GIF playback;
 font family/size, line height and margins for reflowable text; full screen;
-one bookmark per document; persistent PDF page, text line and e-book CFI.
+one bookmark per document; persistent page/text position.
 PDF uses PDFKit and plain text uses NSTextView. Reflowable books use MuPDF; WebKit/Foliate is retained only for CHM.
 There is no Electron, Chromium distribution, Node runtime, library database,
 account, cloud sync, updater, telemetry or general-purpose plug-in framework.
@@ -28,7 +28,8 @@ for every format. Rare formats need the full build's decoder libraries.
 | EPUB, MOBI, AZW/AZW1/AZW3/KF8, PRC | MuPDF |
 | FB2, FB2Z, FBZ, ZFB2, FB2.ZIP | MuPDF |
 | AZW4/Print Replica | Palm record adapter → embedded PDF → PDFKit |
-| Palm DOC/PDB (including TealDoc/Plucker creator sniffing), TCR | small legacy adapters → NSTextView |
+| Palm DOC/PDB | MuPDF first, Palm DOC fallback; TealDoc/Plucker are not falsely decoded as Palm DOC |
+| TCR | small Sumatra-derived legacy adapter → NSTextView |
 | TXT, JS, JSON, XML, LOG, NFO, FILE_ID.DIZ, READ.ME | NSTextView; UTF-8 / Foundation encoding detection |
 | Microsoft Reader LIT | ConvertLIT helper → standard OEB/EPUB directory → MuPDF; DRM5 remains unsupported |
 | Markdown | MuPDF/cmark-gfm |
