@@ -45,4 +45,12 @@ final class ReaderTests:XCTestCase{
         XCTAssertEqual(Format.resolve("book.azw4",prefix:replica),.replica)
         XCTAssertEqual(Format.resolve("wrong.txt",prefix:Data("%PDF-1.7".utf8)),.pdf)
     }
+    func testChapterDetection(){
+        let zh="序章\n\n开始\n\n第一章 初见\n\n正文。\n\n第二章 重逢\n\n正文。\n\n番外一\n"
+        XCTAssertEqual(ChapterDetector.detect(zh).map(\.title),["序章","第一章 初见","第二章 重逢","番外一"])
+        let en="Prologue\n\nText.\n\nChapter 1 Arrival\n\nText.\n\nChapter 2 Winter\n"
+        XCTAssertEqual(ChapterDetector.detect(en).map(\.title),["Prologue","Chapter 1 Arrival","Chapter 2 Winter"])
+        let prose="他终于读完了第一章，然后睡了。\nThis chapter 1 sentence is prose.\n"
+        XCTAssertTrue(ChapterDetector.detect(prose).isEmpty)
+    }
 }
