@@ -32,7 +32,25 @@ import PDFKit
 @MainActor struct TextReader:NSViewRepresentable{
     @ObservedObject var state:ReaderState;let text:String
     func makeCoordinator()->Coordinator{Coordinator(state)}
-    func makeNSView(context:Context)->NSScrollView{let s=NSTextView.scrollableTextView(),v=s.documentView as! NSTextView;v.isEditable=false;v.isSelectable=true;v.usesFindBar=true;v.string=text;let c=context.coordinator;c.view=v;s.contentView.postsBoundsChangedNotifications=true;NotificationCenter.default.addObserver(c,selector:#selector(Coordinator.scrolled),name:NSView.boundsDidChangeNotification,object:s.contentView);c.style(force:true);state.outlineBusy=true;Task{@MainActor in let result=await Task.detached(priority:.utility){()->([Int],[DetectedChapter]) in var lines=[0];for(i,x)in text.utf16.enumerated()where x==10{if Task.isCancelled{return(lines,[])};lines.append(i+1)};return(lines,ChapterDetector.detect(text))}.value;guard c.active else{return};c.lines=result.0;c.indexed=true;state.count=c.lines.count;c.go(state.page);state.outline=result.1.map{.init(title:$0.title,target:String($0.line),depth:$0.depth)};state.outlineBusy=false};return s}
+    func makeNSView(context:Context)->NSScrollView{
+        let scroll=NSTextView.scrollableTextView(),view=scroll.documentView as! NSTextView,c=context.coordinator
+        view.isEditable=false;view.isSelectable=true;view.usesFindBar=true;view.string=text;c.view=view
+        scroll.contentView.postsBoundsChangedNotifications=true
+        NotificationCenter.default.addObserver(c,selector:#selector(Coordinator.scrolled),name:NSView.boundsDidChangeNotification,object:scroll.contentView)
+        c.style(force:true);state.outlineBusy=true
+        Task{@MainActor in
+            let scan=await Task.detached(priority:.utility){
+                var lines=[0];lines.reserveCapacity(max(1,text.count/80))
+                for (i,x) in text.utf16.enumerated() where x==10{lines.append(i+1)}
+                return (lines,ChapterDetector.detect(text))
+            }.value
+            guard c.active else{return}
+            c.lines=scan.0;state.count=scan.0.count;c.go(state.page)
+            state.outline=scan.1.map{.init(title:$0.title,target:String($0.line),depth:$0.depth)}
+            state.outlineBusy=false
+        }
+        return scroll
+    }
     func updateNSView(_ s:NSScrollView,context:Context){let c=context.coordinator;c.style();guard c.command != state.command.id else{return};c.command=state.command.id;switch state.command.name{case"zoom":c.zoom=state.command.number;c.style();case"fit":c.zoom=1;c.style();case"style":c.style();case"page","href":c.go(state.command.name=="href" ? Int(state.command.text) ?? 0:Int(state.command.number));case"find":c.find(state.command.text);case"print":if let v=c.view{NSPrintOperation(view:v).run()};default:break}}
     static func dismantleNSView(_ v:NSScrollView,coordinator:Coordinator){coordinator.active=false;coordinator.state.outlineBusy=false;NotificationCenter.default.removeObserver(coordinator)}
     @MainActor final class Coordinator:NSObject{let state:ReaderState;weak var view:NSTextView?;var active=true,indexed=false,lines=[0],command:UUID?,zoom=1.0,styleKey="";init(_ s:ReaderState){state=s}
