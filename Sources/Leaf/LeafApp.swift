@@ -147,7 +147,7 @@ private struct LeafCommands:Commands{
             Button("Previous Page"){state?.turn(-1)}.keyboardShortcut("[");Button("Next Page"){state?.turn(1)}.keyboardShortcut("]")
             Button("Previous File"){state?.sibling(-1)}.keyboardShortcut(.upArrow,modifiers:[.command,.option]);Button("Next File"){state?.sibling(1)}.keyboardShortcut(.downArrow,modifiers:[.command,.option])
             Divider();Button("Zoom In"){if let state{state.setZoom(state.zoom*1.2)}}.keyboardShortcut("+");Button("Zoom Out"){if let state{state.setZoom(state.zoom/1.2)}}.keyboardShortcut("-");Button("Actual Size"){state?.setFit("actual")}.keyboardShortcut("1").disabled(state?.supportsFit != true);Button("Fit Page"){state?.setFit("page")}.keyboardShortcut("0").disabled(state?.supportsFit != true);Button("Fit Width"){state?.setFit("width")}.keyboardShortcut("2").disabled(state?.supportsFit != true)
-            Divider();Button("Paged"){state?.setFlow("paged")}.disabled(state?.supportsFlow != true);Button("Continuous"){state?.setFlow("continuous")}.disabled(state?.supportsFlow != true)
+            Divider();Button("Paged"){state?.setFlow("paged")}.disabled(state?.supportsFlow != true);Button("Continuous"){state?.setFlow("continuous")}.disabled(state?.supportsFlow != true);Toggle("Two Pages",isOn:Binding(get:{state?.spread ?? false},set:{state?.spread=$0})).disabled(state?.supportsSpread != true);Toggle("Right to Left",isOn:Binding(get:{state?.rtl ?? false},set:{state?.rtl=$0})).disabled(state?.supportsRTL != true)
             Divider();Button("Bookmark This Position"){state?.bookmark()}.keyboardShortcut("d");Button("Go to Bookmark"){state?.restoreBookmark()};Button("Contents"){state?.showContents.toggle()}
             Divider();Button("Rotate Left"){state?.rotate(-90)}.disabled(state?.supportsRotation != true);Button("Rotate Right"){state?.rotate(90)}.disabled(state?.supportsRotation != true)
             Divider();Button("Light"){state?.setTheme("light")};Button("Dark"){state?.setTheme("dark")};Button("System Theme"){state?.setTheme("system")}
@@ -160,6 +160,7 @@ private struct LeafCommands:Commands{
 }
 
 @main @MainActor struct LeafApp:App{
+    init(){NSWindow.allowsAutomaticWindowTabbing=true}
     var body:some Scene{
         WindowGroup("Leaf",id:"reader",for:WindowPayload.self){$payload in ReaderWindow(payload:$payload)} defaultValue:{WindowPayload()}
             .defaultSize(width:900,height:740)
