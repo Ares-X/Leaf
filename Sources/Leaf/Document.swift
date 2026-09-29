@@ -37,7 +37,9 @@ struct ReadingDocument{
             catch{return .init(url:url,content:.book(try BookSource(url,format:format)))}
         case .chm:return .init(url:url,content:.book(try BookSource(url,format:format)))
         case .lit:
-            let (temp,opf)=try LitConverter.convert(url);return .init(url:url,content:.book(try BookSource(opf,format:.book,root:opf.deletingLastPathComponent())),temporary:temp)
+            let (temp,root)=try LitConverter.convert(url)
+            do{return .init(url:url,content:.pages(try Pages(root,format:.mupdf)),temporary:temp)}
+            catch{return .init(url:url,content:.book(try BookSource(root,format:.book,root:root)),temporary:temp)}
         case .image,.comic,.mupdf,.djvu:return .init(url:url,content:.pages(try Pages(url,format:format)))
         case .postscript:
             let candidates=["/opt/homebrew/bin/gs","/usr/local/bin/gs","/usr/bin/gs"];guard let gs=candidates.first(where:{FileManager.default.isExecutableFile(atPath:$0)})else{throw ReadError("PostScript/PJL needs Ghostscript.")}
