@@ -4,7 +4,7 @@ Copyright (c) 2026 Leaf contributors. New Leaf code is licensed under
 AGPL-3.0-or-later; see LICENSE. Earlier MIT-licensed Leaf code remains available
 under its original license in git history, with its notice retained here.
 
-Leaf follows SumatraPDF's format-dispatch and lazy-page-reading approach. It is
+Leaf follows SumatraPDF's format-dispatch, engine-routing and lazy-page-reading approach. Portable routing behavior is taken from Sumatra's EngineCreate/EngineMupdf/EngineImages paths rather than independently redesigned. It is
 not a port of Win32 UI code and is not described as a clean-room implementation.
 No Win32 renderer or Windows DLL is copied into the macOS app.
 

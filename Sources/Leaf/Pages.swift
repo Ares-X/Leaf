@@ -10,7 +10,7 @@ actor Pages{
         if format == .comic && url.hasDirectoryPath{archive=nil;source=nil;let f=FileManager.default.enumerator(at:url,includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])?.allObjects as? [URL] ?? [];names=f.filter{Format.detect($0.lastPathComponent) == .image}.map{String($0.path.dropFirst(url.path.count+(url.path.hasSuffix("/") ? 0:1)))}.sorted{$0.localizedStandardCompare($1) == .orderedAscending};count=names.count}
         else if format == .comic{let a=try Archive(url);archive=a;source=nil;names=url.pathExtension.lowercased()=="ora" ? a.entries.filter{$0.name=="mergedimage.png"}.map(\.name):a.images;count=names.count}
         else if format == .image,let s=CGImageSourceCreateWithURL(url as CFURL,[kCGImageSourceShouldCache:false] as CFDictionary){source=s;archive=nil;names=[];count=CGImageSourceGetCount(s)}
-        else{source=nil;archive=nil;names=[];let n=try NativeFile(url,engine:format == .djvu ? "DjVu":(url.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF"));if n.isReflowable{n.style("body{margin:2em;line-height:1.6}");n.layout()};native=n;count=n.count}
+        else{source=nil;archive=nil;names=[];let n=try NativeFile(url,engine:format == .djvu ? "DjVu":(url.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF"));native=n;count=n.count}
         guard count>0 else{throw ReadError("No readable pages found")}
     }
     func image(_ page:Int,width:Int)throws->CGImage{try Task.checkCancellation();guard(0..<count).contains(page)else{throw ReadError("Page out of range")};let width=max(128,min(16384,width)),key="\(page):\(width)";if let i=cache.firstIndex(where:{$0.0==key}){let h=cache.remove(at:i);cache.append(h);return h.1};let image:CGImage

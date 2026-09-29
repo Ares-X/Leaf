@@ -18,7 +18,7 @@ struct ReadingDocument{
     static func open(_ url:URL)throws->ReadingDocument{
         try Task.checkCancellation()
         if (try? url.resourceValues(forKeys:[.isDirectoryKey]).isDirectory)==true{let f=URL(fileURLWithPath:url.path,isDirectory:true);return .init(url:f,content:.pages(try Pages(f,format:.comic)))}
-        let fh=try FileHandle(forReadingFrom:url),prefix=try fh.read(upToCount:128) ?? Data();try fh.close()
+        let fh=try FileHandle(forReadingFrom:url),prefix=try fh.read(upToCount:2048) ?? Data();try fh.close()
         let format=Format.resolve(url.lastPathComponent,prefix:prefix)
 
         switch format{
