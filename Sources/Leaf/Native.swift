@@ -48,8 +48,9 @@ final class NativeFile {
             throw ReadError(String(cString: error).isEmpty ? "Cannot render page" : String(cString: error))
         }
         let w = Int(info[0]), h = Int(info[1]), stride = Int(info[2]), channels = Int(info[3])
-        guard w > 0, h > 0, [3, 4].contains(channels), stride >= w * channels else { free(p); throw ReadError("Invalid page bitmap") }
-        let data = Data(bytesNoCopy: p, count: stride * h, deallocator: .free)
+        guard w>0,h>0,[3,4].contains(channels),w<=Int.max/channels,stride>=w*channels,stride<=Int.max/h else{free(p);throw ReadError("Invalid page bitmap")}
+        let bytes=stride*h;guard bytes<=512*1024*1024 else{free(p);throw ReadError("Page bitmap is too large")}
+        let data=Data(bytesNoCopy:p,count:bytes,deallocator:.free)
         guard let provider = CGDataProvider(data: data as CFData),
               let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: channels * 8,
                                   bytesPerRow: stride, space: CGColorSpace(name: CGColorSpace.sRGB)!,
