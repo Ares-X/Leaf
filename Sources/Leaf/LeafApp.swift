@@ -43,7 +43,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     func setFlow(_ v:String){flow=v;UserDefaults.standard.set(v,forKey:"flow");send("flow",text:v)}
     func applyTypography(){let d=UserDefaults.standard;d.set(font,forKey:"font");d.set(fontSize,forKey:"fontSize");d.set(lineHeight,forKey:"lineHeight");d.set(margin,forKey:"margin");send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}
     func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");applyTypography()}
-    func rotate(_ d:Int){rotation=(rotation+d+360)%360}
+    func rotate(_ d:Int){rotation=(rotation+d+360)%360;send("rotate",number:Double(d))}
     func bookmark(){guard let u=document?.url else{return};persist();UserDefaults.standard.set(UserDefaults.standard.data(forKey:"position:"+u.standardizedFileURL.path),forKey:"bookmark:"+u.standardizedFileURL.path);status="Bookmark saved"}
     func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let s=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};if isBook,let c=s.cfi{send("href",text:c)}else{go(String(s.page+1))}}
 }
