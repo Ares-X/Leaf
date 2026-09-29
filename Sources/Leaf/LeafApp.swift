@@ -53,7 +53,7 @@ struct ReadingPosition:Codable{var page=0}
         let oldTypography="\(font)|\(fontSize)|\(lineHeight)|\(margin)",oldTheme=theme
         readPreferences(layout:false)
         let newTypography="\(font)|\(fontSize)|\(lineHeight)|\(margin)"
-        if oldTypography != newTypography || (oldTheme != theme && (isText || isCHM)){send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}
+        if oldTypography != newTypography || oldTheme != theme{if isText || isCHM || reflowable{send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}}
     }
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isPDF:Bool{if case .pdf=document?.content{return true};return false}
@@ -123,7 +123,7 @@ struct ReadingPosition:Codable{var page=0}
     func setFit(_ v:String){guard supportsFit,["page","width","actual"].contains(v) else{return};fit=v;zoom=1;UserDefaults.standard.set(v,forKey:"fit");send("fit",text:v)}
     func setFlow(_ v:String){guard ["paged","continuous"].contains(v) else{return};flow=v;UserDefaults.standard.set(v,forKey:"flow");if supportsFlow{send("flow",text:v)}}
     func applyTypography(){let d=UserDefaults.standard;d.set(font,forKey:"font");d.set(fontSize,forKey:"fontSize");d.set(lineHeight,forKey:"lineHeight");d.set(margin,forKey:"margin");send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)");NotificationCenter.default.post(name:.leafAppearancePreferencesChanged,object:nil)}
-    func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");if isText || isCHM{send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")};NotificationCenter.default.post(name:.leafAppearancePreferencesChanged,object:nil)}
+    func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");if isText || isCHM || reflowable{send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")};NotificationCenter.default.post(name:.leafAppearancePreferencesChanged,object:nil)}
     func rotate(_ d:Int){guard supportsRotation else{return};rotation=(rotation+d+360)%360;send("rotate",number:Double(d))}
     func bookmark(){guard let u=document?.url else{return};persist();UserDefaults.standard.set(UserDefaults.standard.data(forKey:"position:"+u.standardizedFileURL.path),forKey:"bookmark:"+u.standardizedFileURL.path);status="Bookmark saved"}
     func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};go(String(p.page+1))}
@@ -230,7 +230,7 @@ private struct LeafCommands:Commands{
     @ViewBuilder var documentArea:some View{
         Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{WelcomeView(open:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)
     }
-    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{state.searchable=await p.hasText;if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
+    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{state.searchable=await p.hasText;if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font,theme:state.theme){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
 }
 private struct DocumentProxy:ViewModifier{
     let url:URL?
