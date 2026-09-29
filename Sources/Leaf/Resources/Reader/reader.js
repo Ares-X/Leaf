@@ -28,19 +28,11 @@ const epubSource = async meta => {
         sha1: async text => new Uint8Array(await (await fetchOK(`${base}/sha1?text=${encodeURIComponent(text)}`)).arrayBuffer()),
     }
 }
-const htmlBook = async (meta, markdown = false) => {
-    let paths, contents
-    if (meta.format === 'chm') {
-        paths = meta.entries.map(x => x.filename).filter(x => /\.x?html?$/i.test(x))
-        const index = paths.findIndex(x => /(^|\/)(index|default|welcome)\.html?$/i.test(x))
-        if (index > 0) paths.unshift(...paths.splice(index, 1))
-        contents = async path => (await fetchOK(entryURL(path))).text()
-    } else {
-        paths = [meta.name]
-        let html = await (await fetchOK(`${base}/raw`)).text()
-        if (markdown) { const { marked } = await import('./marked.js'); html = marked.parse(html, { gfm: true }) }
-        contents = async () => html
-    }
+const htmlBook = async meta => {
+    const paths = meta.entries.map(x => x.filename).filter(x => /\.x?html?$/i.test(x))
+    const index = paths.findIndex(x => /(^|\/)(index|default|welcome)\.html?$/i.test(x))
+    if (index > 0) paths.unshift(...paths.splice(index, 1))
+    const contents = async path => (await fetchOK(entryURL(path))).text()
     if (!paths.length) throw Error('This document contains no HTML pages')
     const localHref = href => href.replace(/^(?:mk:@MSITStore:|ms-its:|its:).*?::\/?/i, '').replace(/\\/g, '/')
     const resolve = href => {
@@ -55,7 +47,7 @@ const htmlBook = async (meta, markdown = false) => {
         let blob
         const createDocument = async () => {
             const doc = parse(await contents(path)), tag = doc.createElement('base')
-            tag.href = meta.format === 'chm' ? entryURL(path) : `${base}/files/`
+            tag.href = entryURL(path)
             doc.head.prepend(tag)
             // All scripts are disabled by the reader's CSP. No generic HTML sanitizer or parser framework.
             return doc
@@ -69,7 +61,7 @@ const htmlBook = async (meta, markdown = false) => {
         }
     })
     let toc = paths.map(path => ({ label: path, href: entryURL(path) }))
-    if (meta.format === 'chm') {
+    {
         const hhc = meta.entries.find(x => /\.hhc$/i.test(x.filename))
         if (hhc) {
             const doc = parse(await (await fetchOK(entryURL(hhc.filename))).text())
@@ -139,7 +131,7 @@ view.addEventListener('load', ({ detail: { doc } }) => doc.addEventListener('key
 try {
     const meta = await (await fetchOK(`${base}/meta`)).json()
     let book
-    if (meta.format === 'chm' || meta.format === 'html' || meta.format === 'markdown') book = await htmlBook(meta, meta.format === 'markdown')
+    if (meta.format === 'chm') book = await htmlBook(meta)
     else if (meta.entries.some(x => /\.opf$/i.test(x.filename)) || meta.name.toLowerCase().endsWith('.epub')) {
         const { EPUB } = await import('./foliate/epub.js')
         book = await new EPUB(await epubSource(meta)).init()
