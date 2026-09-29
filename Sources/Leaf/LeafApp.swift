@@ -44,7 +44,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
         spread=d.bool(forKey:"spread");rtl=d.bool(forKey:"rtl")
         if let p=d.string(forKey:"lastDocument"),FileManager.default.fileExists(atPath:p){restoreTask=Task{try? await Task.sleep(nanoseconds:300_000_000);guard !Task.isCancelled,document==nil,!busy else{return};open(URL(fileURLWithPath:p))}}
     }
-    var isBook:Bool{if case .book=document?.content{return true};return false}
+    var isBook:Bool{false}
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
     var supportsFlow:Bool{document != nil && !isText}
@@ -150,7 +150,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     .contextMenu{Button("Open…",action:state.chooseFile);if state.document != nil{Button("Show in Finder"){if let u=state.document?.url{NSWorkspace.shared.activateFileViewerSelecting([u])}};Button("Copy File Path",action:state.copyPath);Divider();Button("Previous"){state.turn(-1)};Button("Next"){state.turn(1)};if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")}}}}
     .onDrop(of:[.fileURL],isTargeted:nil){items in guard let item=items.first else{return false};_=item.loadObject(ofClass:URL.self){u,_ in if let u{Task{@MainActor in state.open(u)}}};return true}
     .alert("Unable to read document",isPresented:Binding(get:{state.error != nil},set:{if !$0{state.error=nil}})){Button("OK"){state.error=nil}}message:{Text(state.error ?? "")}}
-    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .book(let s):BookReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{let n=await p.count;guard !Task.isCancelled else{return};state.count=n;state.page=max(0,min(state.page,n-1))}}}
+    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{let n=await p.count;guard !Task.isCancelled else{return};state.count=n;state.page=max(0,min(state.page,n-1))}}}
 }
 struct TypographyMenu:View{@ObservedObject var state:ReaderState;var body:some View{Group{Picker("Font",selection:$state.font){Text("System").tag("system");Text("Serif").tag("serif");Text("Sans Serif").tag("sans-serif");Text("Monospace").tag("monospace")}.onChange(of:state.font){_ in state.applyTypography()};Stepper("Font \(Int(state.fontSize)) pt",value:$state.fontSize,in:10...36,step:1).onChange(of:state.fontSize){_ in state.applyTypography()};Stepper("Line \(state.lineHeight,specifier:"%.1f")",value:$state.lineHeight,in:1...2.4,step:0.1).onChange(of:state.lineHeight){_ in state.applyTypography()};Stepper("Margin \(Int(state.margin))",value:$state.margin,in:0...96,step:8).onChange(of:state.margin){_ in state.applyTypography()}}}}
 #else
