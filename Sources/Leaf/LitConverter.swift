@@ -2,7 +2,7 @@
 import Foundation
 
 enum LitConverter{
-    static func convert(_ url:URL)throws->(TemporaryDirectory,URL){
+    static func convert(_ url:URL)throws->(TemporaryDirectory,URL,URL){
         let temp=try TemporaryDirectory(),dir=temp.url.appendingPathComponent("lit",isDirectory:true)
         try FileManager.default.createDirectory(at:dir,withIntermediateDirectories:true)
         let bundled=Bundle.main.resourceURL?.appendingPathComponent("Tools/clit").path
@@ -11,7 +11,7 @@ enum LitConverter{
         guard p.terminationStatus==0 else{throw ReadError(String(data:pipe.fileHandleForReading.readDataToEndOfFile(),encoding:.utf8) ?? "LIT conversion failed")}
         let files=(FileManager.default.enumerator(at:dir,includingPropertiesForKeys:nil)?.allObjects as? [URL]) ?? []
         guard let opf=files.first(where:{$0.pathExtension.lowercased()=="opf"})else{throw ReadError("LIT contains no OEB package")}
-        return(temp,opf)
+        return(temp,opf,dir)
     }
 }
 #endif

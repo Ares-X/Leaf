@@ -38,7 +38,8 @@ public struct Archive: Sendable {
             try Task.checkCancellation()
             guard let path = archive_entry_pathname_utf8(entry) ?? archive_entry_pathname(entry),
                   String(cString: path) == name else { archive_read_data_skip(handle); continue }
-            let expected=archive_entry_size(entry);guard expected>=0,expected<=512*1024*1024 else{throw ReadError("Archive entry is too large")}\n            var result=Data();result.reserveCapacity(Int(expected));var buffer=[UInt8](repeating:0,count:64*1024)
+            let expected=archive_entry_size(entry);guard expected>=0,expected<=512*1024*1024 else{throw ReadError("Archive entry is too large")}
+            var result=Data();result.reserveCapacity(Int(expected));var buffer=[UInt8](repeating:0,count:64*1024)
             while true {
                 try Task.checkCancellation()
                 let n = archive_read_data(handle, &buffer, buffer.count)

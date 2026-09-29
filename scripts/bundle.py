@@ -70,6 +70,24 @@ if not core:
     shutil.copy(root / 'build' / 'native-dependencies.json', licenses / 'native-dependencies.json')
     shutil.copy(root / 'build' / 'mupdf-revision.txt', licenses / 'mupdf-revision.txt')
 
+# Bundle non-system dependencies of the LIT helper too; users must not need Homebrew at runtime.
+tool=contents/'Resources'/'Tools'/'clit'
+if tool.exists():
+    ident=run('otool','-D',tool).splitlines()[1:]
+    rpaths=re.findall(r'cmd LC_RPATH\n.*?\n\s*path (.+?) \(offset',run('otool','-l',tool))
+    for line in run('otool','-L',tool).splitlines()[1:]:
+        dependency=line.strip().split(' (compatibility')[0]
+        if dependency in ident or dependency.startswith(('/usr/lib/','/System/Library/')): continue
+        if dependency.startswith('@rpath/'):
+            candidates=[Path(p.replace('@loader_path',str(tool.parent)))/dependency[len('@rpath/'):] for p in rpaths]
+            resolved=next((p for p in candidates if p.exists()),None)
+        elif dependency.startswith('@loader_path/'): resolved=tool.parent/dependency[len('@loader_path/'):]
+        else: resolved=Path(dependency)
+        if resolved is None or not resolved.is_file(): raise RuntimeError(f'Cannot resolve {dependency} from {tool}')
+        child=bundle(resolved)
+        subprocess.check_call(['install_name_tool','-change',dependency,'@loader_path/../../Frameworks/'+child.name,str(tool)])
+    subprocess.check_call(['codesign','--force','--sign','-',str(tool)])
+
 # Format.swift is the single source of truth, including compound suffixes.
 groups = re.findall(r'\(\.(\w+), "([^"]+)"\)', (root / 'Sources/LeafCore/Format.swift').read_text())
 suffixes=[s for kind,s in groups if not core or kind not in ('mupdf','djvu','chm','lit','postscript')]

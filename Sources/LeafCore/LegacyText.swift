@@ -14,6 +14,8 @@ public enum LegacyText{
     public static func palm(_ data:Data,replica:Bool=false)throws->Data{
         let b=[UInt8](data)
         func be(_ p:Int,_ n:Int)throws->Int{guard p>=0,p+n<=b.count else{throw ReadError("Truncated Palm document")};return b[p..<p+n].reduce(0){($0<<8)|Int($1)}}
+        guard b.count>=78 else{throw ReadError("Truncated Palm document")};let creator=String(decoding:b[60..<68],as:UTF8.self)
+        if !replica,creator != "TEXtREAd"{throw ReadError(creator=="TEXtTlDc" || creator=="DataPlkr" ? "This PDB variant is not supported yet":"Unsupported Palm database")}
         let count=try be(76,2);guard count>=2,78+count*8<=b.count else{throw ReadError("Invalid Palm record table")}
         var offsets=try(0..<count).map{try be(78+$0*8,4)};offsets.append(b.count)
         guard offsets[0]>=78+count*8,zip(offsets,offsets.dropFirst()).allSatisfy({$0<=$1})else{throw ReadError("Invalid Palm record offsets")}
