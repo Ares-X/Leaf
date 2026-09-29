@@ -4,6 +4,8 @@ import LeafCore
 import UniformTypeIdentifiers
 import Darwin
 
+extension Notification.Name{static let leafAppearancePreferencesChanged=Notification.Name("LeafAppearancePreferencesChanged")}
+
 struct ReaderCommand:Equatable{let id=UUID();var name="",text="";var number=0.0}
 struct ContentsItem:Identifiable,Codable{var id:String{target};let title:String,target:String;var depth=0}
 struct ReadingPosition:Codable{var page=0}
@@ -116,8 +118,8 @@ struct ReadingPosition:Codable{var page=0}
     func setZoom(_ v:Double){zoom=max(0.25,min(6,v));fit="custom";send("zoom",number:zoom)}
     func setFit(_ v:String){guard supportsFit,["page","width","actual"].contains(v) else{return};fit=v;zoom=1;UserDefaults.standard.set(v,forKey:"fit");send("fit",text:v)}
     func setFlow(_ v:String){guard ["paged","continuous"].contains(v) else{return};flow=v;UserDefaults.standard.set(v,forKey:"flow");if supportsFlow{send("flow",text:v)}}
-    func applyTypography(){let d=UserDefaults.standard;d.set(font,forKey:"font");d.set(fontSize,forKey:"fontSize");d.set(lineHeight,forKey:"lineHeight");d.set(margin,forKey:"margin");send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}
-    func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");if isText || isCHM{send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}}
+    func applyTypography(){let d=UserDefaults.standard;d.set(font,forKey:"font");d.set(fontSize,forKey:"fontSize");d.set(lineHeight,forKey:"lineHeight");d.set(margin,forKey:"margin");send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)");NotificationCenter.default.post(name:.leafAppearancePreferencesChanged,object:nil)}
+    func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");if isText || isCHM{send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")};NotificationCenter.default.post(name:.leafAppearancePreferencesChanged,object:nil)}
     func rotate(_ d:Int){guard supportsRotation else{return};rotation=(rotation+d+360)%360;send("rotate",number:Double(d))}
     func bookmark(){guard let u=document?.url else{return};persist();UserDefaults.standard.set(UserDefaults.standard.data(forKey:"position:"+u.standardizedFileURL.path),forKey:"bookmark:"+u.standardizedFileURL.path);status="Bookmark saved"}
     func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};go(String(p.page+1))}
@@ -144,7 +146,7 @@ private extension FocusedValues{
             .task(id:payload.path){if state.document==nil,let path=payload.path,FileManager.default.fileExists(atPath:path){state.open(URL(fileURLWithPath:path))}}
             .onChange(of:state.document?.url.path){payload.path=$0}
             .onOpenURL{url in if state.document == nil{state.open(url)}else{openWindow(id:"reader",value:WindowPayload(path:url.path))}}
-            .onReceive(NotificationCenter.default.publisher(for:UserDefaults.didChangeNotification)){_ in state.syncAppearancePreferences()}
+            .onReceive(NotificationCenter.default.publisher(for:.leafAppearancePreferencesChanged)){_ in state.syncAppearancePreferences()}
             .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in state.persist()}
     }
 }
