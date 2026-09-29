@@ -49,3 +49,18 @@ API unsigned char *lf_render(Document *d, int index, int width, int *info, char 
     return out;
 }
 
+
+API char *lf_text(Document *d, int index) {
+    miniexp_t expr = miniexp_nil;
+    char error[512] = {0};
+    while ((expr = ddjvu_document_get_pagetext(d->doc, index, "page")) == miniexp_dummy)
+        if (!messages(d, error)) return NULL;
+    char *out = NULL;
+    miniexp_t text = miniexp_nth(5, expr);
+    if (miniexp_stringp(text)) {
+        const char *value = miniexp_to_str(text);
+        if (value) out = strdup(value);
+    }
+    ddjvu_miniexp_release(d->doc, expr);
+    return out;
+}
