@@ -9,7 +9,8 @@ Calibre/unar conversions with mature decoders and a small native shell.
 ## Reading
 
 Open/Finder/drop/recent files; contents; search; page or percentage navigation;
-zoom; fit page/width; two-page comics/PDF; right-to-left comics/PDF; GIF playback;
+zoom; actual/fit page/fit width; paged/continuous; two-page and right-to-left reading; GIF playback;
+font family/size, line height and margins for reflowable text; full screen;
 one bookmark per document; persistent PDF page, text line and e-book CFI.
 PDF uses PDFKit, text uses NSTextView, e-books use the system WebKit with Foliate.
 There is no Electron, Chromium distribution, Node runtime, library database,
@@ -24,11 +25,12 @@ for every format. Rare formats need the full build's decoder libraries.
 | Files | Engine/path |
 | --- | --- |
 | PDF, PDF-compatible AI | PDFKit; password prompt for encrypted PDF |
-| EPUB, MOBI, AZW, AZW3/KF8, PRC | Foliate + WebKit; native slice/entry reads, no Calibre |
+| EPUB, MOBI, AZW/AZW1/AZW3/KF8, PRC | Foliate + WebKit; native slice/entry reads, no Calibre |
 | FB2, FB2Z, FBZ, ZFB2, FB2.ZIP | Foliate + libarchive |
 | AZW4/Print Replica | Palm record adapter → embedded PDF → PDFKit |
-| Palm DOC/PDB, TCR | small legacy adapters → NSTextView |
-| TXT, LOG, NFO | NSTextView; UTF-8 / Foundation encoding detection |
+| Palm DOC/PDB (including TealDoc/Plucker creator sniffing), TCR | small legacy adapters → NSTextView |
+| TXT, JS, JSON, XML, LOG, NFO, FILE_ID.DIZ, READ.ME | NSTextView; UTF-8 / Foundation encoding detection |
+| Microsoft Reader LIT | ConvertLIT helper → OEB/EPUB → Foliate; DRM5 remains unsupported |
 | Markdown | Marked (GFM) → Foliate; not a home-written Markdown parser |
 | HTML, HTM, XHTML | WebKit/Foliate local-document adapter |
 | CBZ, CBR, CB7, CBT, ZIP, RAR, 7Z, TAR | system libarchive → ImageIO/native image decoder |
@@ -40,7 +42,7 @@ for every format. Rare formats need the full build's decoder libraries.
 | JPEG XR: JXR, HDP, WDP | MuPDF codec; requires real-file verification |
 | JPEG XL | libjxl; current adapter decodes the first frame |
 | AVIF, HEIF/HEIC | ImageIO; availability and variants depend on the macOS codec |
-| PS, EPS, PJL, PostScript AI | Ghostscript, **external and optional**, as in Sumatra |
+| PS, PS.GZ, EPS, PJL, PostScript AI | Ghostscript, **external and optional**, as in Sumatra |
 
 Image folders can also be read as comics. TIFF frames are treated as pages;
 standalone GIFs can play/pause. DRM is not removed. PDB is Palm DOC/MOBI rather
@@ -51,6 +53,7 @@ not executed. Fixed-layout EPUB/CHM compatibility still needs sample testing.
 
 ## What makes it small
 
+- Format routing is centralized: longest extension first, then a small Sumatra-derived magic sniffer for mislabeled files.
 - Native libraries are loaded only when their format is opened and released with the document.
 - The app does not unpack EPUB/comic archives into a temporary library.
 - Comic images are decoded for the viewport and cached as at most three images,
