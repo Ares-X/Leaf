@@ -29,7 +29,10 @@ struct ReadingDocument{
         case .book,.markdown:
             do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
             catch{return .init(url:url,content:.book(try BookSource(url,format:format)))}
-        case .html,.chm:return .init(url:url,content:.book(try BookSource(url,format:format)))
+        case .html:
+            do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
+            catch{return .init(url:url,content:.book(try BookSource(url,format:format)))}
+        case .chm:return .init(url:url,content:.book(try BookSource(url,format:format)))
         case .lit:
             let (temp,opf)=try LitConverter.convert(url);return .init(url:url,content:.book(try BookSource(opf,format:.book,root:opf.deletingLastPathComponent())),temporary:temp)
         case .image,.comic,.mupdf,.djvu:return .init(url:url,content:.pages(try Pages(url,format:format)))
