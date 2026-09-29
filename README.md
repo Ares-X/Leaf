@@ -12,7 +12,7 @@ Open/Finder/drop/recent files; contents; search; page or percentage navigation;
 zoom; actual/fit page/fit width; paged/continuous; two-page and right-to-left reading; GIF playback;
 font family/size, line height and margins for reflowable text; full screen;
 one bookmark per document; persistent PDF page, text line and e-book CFI.
-PDF uses PDFKit, text uses NSTextView, e-books use the system WebKit with Foliate.
+PDF uses PDFKit and plain text uses NSTextView. Reflowable books use MuPDF first; WebKit/Foliate remains a compatibility fallback.
 There is no Electron, Chromium distribution, Node runtime, library database,
 account, cloud sync, updater, telemetry or general-purpose plug-in framework.
 
@@ -25,14 +25,14 @@ for every format. Rare formats need the full build's decoder libraries.
 | Files | Engine/path |
 | --- | --- |
 | PDF, PDF-compatible AI | PDFKit; password prompt for encrypted PDF |
-| EPUB, MOBI, AZW/AZW1/AZW3/KF8, PRC | Foliate + WebKit; native slice/entry reads, no Calibre |
-| FB2, FB2Z, FBZ, ZFB2, FB2.ZIP | Foliate + libarchive |
+| EPUB, MOBI, AZW/AZW1/AZW3/KF8, PRC | MuPDF first, Foliate/WebKit compatibility fallback |
+| FB2, FB2Z, FBZ, ZFB2, FB2.ZIP | MuPDF first, Foliate/libarchive compatibility fallback |
 | AZW4/Print Replica | Palm record adapter → embedded PDF → PDFKit |
 | Palm DOC/PDB (including TealDoc/Plucker creator sniffing), TCR | small legacy adapters → NSTextView |
 | TXT, JS, JSON, XML, LOG, NFO, FILE_ID.DIZ, READ.ME | NSTextView; UTF-8 / Foundation encoding detection |
 | Microsoft Reader LIT | ConvertLIT helper → OEB/EPUB → Foliate; DRM5 remains unsupported |
-| Markdown | Marked (GFM) → Foliate; not a home-written Markdown parser |
-| HTML, HTM, XHTML | WebKit/Foliate local-document adapter |
+| Markdown | MuPDF/cmark-gfm first; Marked/Foliate compatibility fallback |
+| HTML, HTM, XHTML | MuPDF first; WebKit/Foliate local-document fallback |
 | CBZ, CBR, CB7, CBT, ZIP, RAR, 7Z, TAR | system libarchive → ImageIO/native image decoder |
 | ORA | its merged image; not the individual layer files |
 | DjVu, DJV | DjVuLibre, page-at-a-time |
@@ -59,7 +59,7 @@ not executed. Fixed-layout EPUB/CHM compatibility still needs sample testing.
 - Comic images are decoded for the viewport and cached as at most three images,
   with a 64 MiB cache target. A single oversized image can exceed that target;
   this is **not** a limit on total process memory. JPEG XL currently needs a full-frame decode.
-- Reflow, CFI, nested FB2 markup, font deobfuscation and book search are supplied by Foliate.
+- Reflowable document layout is supplied by MuPDF; Foliate remains only as a temporary compatibility fallback until corpus validation allows deleting it.
 - MuPDF is built for size without its duplicate PDF/comic/e-book readers, JS,
   OCR, barcode and office export components. Required fonts/codecs are not blindly removed.
 - No full-document PDF conversion for DjVu/XPS; only PS uses a temporary conversion.
