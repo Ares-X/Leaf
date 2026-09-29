@@ -37,7 +37,10 @@ const htmlBook = async (meta, markdown = false) => {
     const resolve = href => {
         const url = new URL(localHref(href), entryURL(paths[0]))
         const path = decodeURIComponent(url.pathname.replace(/^\/entry\//, ''))
-        return { index: Math.max(0, paths.findIndex(p => meta.format === 'chm' ? p.toLowerCase() === path.toLowerCase() : p === path)), anchor: doc => doc.getElementById(decodeURIComponent(url.hash.slice(1))) }
+        const index = paths.findIndex(p => meta.format === 'chm' ? p.toLowerCase() === path.toLowerCase() : p === path)
+        if (index < 0) return null
+        const hash = decodeURIComponent(url.hash.slice(1))
+        return { index, anchor: doc => hash ? doc.getElementById(hash) : 0 }
     }
     const sections = paths.map(path => {
         let blob
@@ -99,8 +102,7 @@ window.leafCommand = async command => {
         case 'spread': view.renderer.setAttribute('max-column-count', String(command.number)); break
         case 'rtl': view.book.dir = command.number ? 'rtl' : 'ltr'; view.renderer.setAttribute('dir', view.book.dir); break
         case 'flow': view.renderer.setAttribute('flow', command.text === 'continuous' ? 'scrolled' : 'paginated'); break
-        case 'fit': break
-        case 'find': {
+         case 'find': {
             if (!command.text) break
             if (query === command.text && hits.length) { selected = (selected + 1) % hits.length; await view.select(hits[selected].cfi); break }
             const id = ++searchID; query = command.text; hits = []; selected = -1
@@ -129,19 +131,9 @@ try {
     const meta = await (await fetchOK(`${base}/meta`)).json()
     let book
     if (meta.format === 'chm' || meta.format === 'html' || meta.format === 'markdown') book = await htmlBook(meta, meta.format === 'markdown')
-    else if (meta.entries.some(x => /\.opf$/i.test(x.filename))) {
+    else if (meta.entries.some(x => /\.opf$/i.test(x.filename)) || meta.name.toLowerCase().endsWith('.epub')) {
         const { EPUB } = await import('./foliate/epub.js'), sizes = new Map(meta.entries.map(x => [x.filename, x.size]))
         book = await new EPUB({
-            entries: meta.entries,
-            loadText: async name => sizes.has(name) ? (await fetchOK(entryURL(name))).text() : null,
-            loadBlob: async (name, type) => sizes.has(name) ? new Blob([await (await fetchOK(entryURL(name))).arrayBuffer()], { type }) : null,
-            getSize: name => sizes.get(name) ?? 0,
-            sha1: async text => new Uint8Array(await (await fetchOK(`${base}/sha1?text=${encodeURIComponent(text)}`)).arrayBuffer()),
-        }).init()
-    } else if (meta.name.toLowerCase().endsWith('.epub')) {
-        const { EPUB } = await import('./foliate/epub.js'), sizes = new Map(meta.entries.map(x => [x.filename, x.size]))
-        book = await new EPUB({
-            entries: meta.entries,
             loadText: async name => sizes.has(name) ? (await fetchOK(entryURL(name))).text() : null,
             loadBlob: async (name, type) => sizes.has(name) ? new Blob([await (await fetchOK(entryURL(name))).arrayBuffer()], { type }) : null,
             getSize: name => sizes.get(name) ?? 0,
