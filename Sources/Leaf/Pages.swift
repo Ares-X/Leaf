@@ -5,7 +5,7 @@ import ImageIO
 import LeafCore
 
 actor Pages{
-    private let archive:Archive?;private let names:[String];private let url:URL;private var native:NativeFile?;private let source:CGImageSource?;let count:Int;private var cache:[(String,CGImage)]=[]
+    private let archive:Archive?;private let names:[String];private let url:URL;private var native:NativeFile?;private let source:CGImageSource?;private(set) var count:Int;private var cache:[(String,CGImage)]=[]
     init(_ url:URL,format:Format)throws{self.url=url
         if format == .comic && url.hasDirectoryPath{archive=nil;source=nil;let f=FileManager.default.enumerator(at:url,includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])?.allObjects as? [URL] ?? [];names=f.filter{Format.detect($0.lastPathComponent) == .image}.map{String($0.path.dropFirst(url.path.count+(url.path.hasSuffix("/") ? 0:1)))}.sorted{$0.compare($1,options:[.numeric,.caseInsensitive]) == .orderedAscending};count=names.count}
         else if format == .comic{let a=try Archive(url);archive=a;source=nil;names=url.pathExtension.lowercased()=="ora" ? a.entries.filter{$0.name=="mergedimage.png"}.map(\.name):a.images;count=names.count}
@@ -16,6 +16,8 @@ actor Pages{
     func image(_ page:Int,width:Int)throws->CGImage{try Task.checkCancellation();guard(0..<count).contains(page)else{throw ReadError("Page out of range")};let width=max(128,min(16384,width)),key="\(page):\(width)";if let i=cache.firstIndex(where:{$0.0==key}){let h=cache.remove(at:i);cache.append(h);return h.1};let image:CGImage
         if let native{image=try native.image(page,width:width)}else{let data=try archive.map{try $0.data(names[page])} ?? (url.hasDirectoryPath ? Data(contentsOf:url.appendingPathComponent(names[page])):nil);let s=data.flatMap{CGImageSourceCreateWithData($0 as CFData,[kCGImageSourceShouldCache:false] as CFDictionary)} ?? source,index=source != nil ? page:0;let o:[CFString:Any]=[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:width,kCGImageSourceShouldCacheImmediately:true];if let s,let d=CGImageSourceCreateThumbnailAtIndex(s,index,o as CFDictionary){image=d}else if let data{let t=try TemporaryDirectory(),f=t.url.appendingPathComponent(URL(fileURLWithPath:names[page]).lastPathComponent);try data.write(to:f);image=try NativeFile(f,engine:f.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF").image(0,width:width)}else if source != nil{image=try NativeFile(url,engine:url.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF").image(page,width:width)}else{throw ReadError("The installed image decoder cannot read this image")}}
         cache.append((key,image));while cache.count>3 || (cache.count>1 && cache.reduce(0,{$0+$1.1.bytesPerRow*$1.1.height})>64*1024*1024){cache.removeFirst()};return image}
+    var isReflowable:Bool{native?.isReflowable == true}
+    func relayout(fontSize:Double,lineHeight:Double,margin:Double,font:String)->Int?{guard let n=native?.relayout(fontSize:fontSize,lineHeight:lineHeight,margin:margin,font:font) else{return nil};count=n;cache.removeAll();return n}
     func frameDelay(_ p:Int)->Double?{guard url.pathExtension.lowercased()=="gif",count>1,let source,let props=CGImageSourceCopyPropertiesAtIndex(source,p,nil) as? [CFString:Any],let gif=props[kCGImagePropertyGIFDictionary] as? [CFString:Any]else{return nil};return max(0.02,gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? gif[kCGImagePropertyGIFDelayTime] as? Double ?? 0.1)}
     func find(_ q:String,after p:Int)->Int?{guard let native,native.hasText,!q.isEmpty,count>0 else{return nil};for o in 1...count{if Task.isCancelled{return nil};let i=(p+o)%count;if native.text(i)?.localizedCaseInsensitiveContains(q)==true{return i}};return nil}
 }
@@ -108,6 +110,8 @@ actor Pages{
     func handleCommand(){
         if state.command.name=="print"{
             Task{if let image=try? await pages.image(state.page,width:2400){let v=NSImageView();v.image=NSImage(cgImage:image,size:.zero);v.imageScaling = .scaleProportionallyUpOrDown;v.frame=NSRect(x:0,y:0,width:612,height:792);NSPrintOperation(view:v).run()}}
+        }else if state.command.name=="style"{
+            Task{if let n=await pages.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.count=n;state.page=min(state.page,max(0,n-1));state.send("page",number:Double(state.page))}}
         }else if state.command.name=="find"{
             searchGeneration += 1;let generation=searchGeneration,q=state.command.text,p=state.page,id=state.command.id
             Task{let m=await pages.find(q,after:p);guard generation==searchGeneration,state.command.id==id,case .pages(let a)? = state.document?.content,a===pages else{return};if let m{state.page=m;state.send("page",number:Double(m));state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}
