@@ -25,11 +25,11 @@ final class ReaderTests:XCTestCase{
             try Data(base64Encoded:base64)!.write(to:url)
             return (url,Data(try Data(contentsOf:url).prefix(2048)))
         }
-        let epub=try fixture("UEsDBBQAAAAAAKxOPVs4k9VAAQAAAAEAAAAXAAAATUVUQS1JTkYvY29udGFpbmVyLnhtbHhQSwECHwAUAAAAAACsTj1bOJPVQAEAAAABAAAAFwAAAAAAAAAAAAAAgAEAAAAATUVUQS1JTkYvY29udGFpbmVyLnhtbFBLBQYAAAAAAQABAEUAAAA2AAAAAAA=","book.zip");defer{try? FileManager.default.removeItem(at:epub.0)}
+        let epub=try fixture("UEsDBBQAAAAAAA5UPV2DFtyMAQAAAAEAAAAWAAAATUVUQS1JTkYvY29udGFpbmVyLnhtbHhQSwECFAMUAAAAAAAOVD1dgxbcjAEAAAABAAAAFgAAAAAAAAAAAAAAgAEAAAAATUVUQS1JTkYvY29udGFpbmVyLnhtbFBLBQYAAAAAAQABAEQAAAA1AAAAAAA=","book.zip");defer{try? FileManager.default.removeItem(at:epub.0)}
         XCTAssertEqual(try Format.resolve(epub.0,prefix:epub.1),.book)
-        let xps=try fixture("UEsDBBQAAAAAAKxOPVvDKsYIAQAAAAEAAAALAAAAX3JlbHMvLnJlbHN4UEsBAh8AFAAAAAAArE49W8MqxggBAAAAAQAAAAsAAAAAAAAAAAAAAIABAAAAAF9yZWxzLy5yZWxzUEsFBgAAAAABAAEAOQAAACoAAAAAAA==","doc.zip");defer{try? FileManager.default.removeItem(at:xps.0)}
+        let xps=try fixture("UEsDBBQAAAAAAA5UPV2DFtyMAQAAAAEAAAALAAAAX3JlbHMvLnJlbHN4UEsBAhQDFAAAAAAADlQ9XYMW3IwBAAAAAQAAAAsAAAAAAAAAAAAAAIABAAAAAF9yZWxzLy5yZWxzUEsFBgAAAAABAAEAOQAAACoAAAAAAA==","doc.zip");defer{try? FileManager.default.removeItem(at:xps.0)}
         XCTAssertEqual(try Format.resolve(xps.0,prefix:xps.1),.mupdf)
-        let fb2=try fixture("UEsDBBQAAAAAAKxOPVvVQ3MqDgAAAA4AAAAJAAAAc3RvcnkuZmIyPEZpY3Rpb25Cb29rLz5QSwECHwAUAAAAAACsTj1b1UNzKg4AAAAOAAAACQAAAAAAAAAAAAAAgAEAAAAAc3RvcnkuZmIyUEsFBgAAAAABAAEANwAAADUAAAAAAA==","story.zip");defer{try? FileManager.default.removeItem(at:fb2.0)}
+        let fb2=try fixture("UEsDBBQAAAAAAA5UPV2TflVBDgAAAA4AAAAJAAAAc3RvcnkuZmIyPEZpY3Rpb25Cb29rLz5QSwECFAMUAAAAAAAOVD1dk35VQQ4AAAAOAAAACQAAAAAAAAAAAAAAgAEAAAAAc3RvcnkuZmIyUEsFBgAAAAABAAEANwAAADUAAAAAAA==","story.zip");defer{try? FileManager.default.removeItem(at:fb2.0)}
         XCTAssertEqual(try Format.resolve(fb2.0,prefix:fb2.1),.book)
     }
     func testFormatMatrix(){XCTAssertEqual(Format.detect("BOOK.FB2.ZIP"),.book);XCTAssertEqual(Format.detect("icon.ICO"),.image);XCTAssertEqual(Format.detect("comic.CB7"),.comic);for e in Format.extensions{XCTAssertNotEqual(Format.detect("x."+e),.unknown,e)}}
