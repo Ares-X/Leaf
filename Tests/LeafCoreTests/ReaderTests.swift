@@ -50,6 +50,9 @@ final class ReaderTests:XCTestCase{
         XCTAssertEqual(ChapterDetector.detect(zh).map(\.title),["序章","第一章 初见","第二章 重逢","番外一"])
         let en="Prologue\n\nText.\n\nChapter 1 Arrival\n\nText.\n\nChapter 2 Winter\n"
         XCTAssertEqual(ChapterDetector.detect(en).map(\.title),["Prologue","Chapter 1 Arrival","Chapter 2 Winter"])
+        let grouped="卷一\n\n第一章科学边界\n\n正文。\n\n第二章 重逢\n"
+        let g=ChapterDetector.detect(grouped);XCTAssertEqual(g.map(\.depth),[0,1,1])
+        let ja="プロローグ\n\n本文。\n\n第一話 はじまり\n\n本文。\n\n第二話 再会\n";XCTAssertEqual(ChapterDetector.detect(ja).map(\.title),["プロローグ","第一話 はじまり","第二話 再会"])
         let prose="他终于读完了第一章，然后睡了。\nThis chapter 1 sentence is prose.\n"
         XCTAssertTrue(ChapterDetector.detect(prose).isEmpty)
     }
