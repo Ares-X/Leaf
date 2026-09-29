@@ -12,7 +12,7 @@ final class NativeFile {
     let library: UnsafeMutableRawPointer
     let document: UnsafeMutableRawPointer
     private let closeDocument:Close,render:Render?
-    private let textFn:UnsafeMutableRawPointer?,pathFn:UnsafeMutableRawPointer?,readFn:UnsafeMutableRawPointer?
+    private let textFn:UnsafeMutableRawPointer?,pathFn:UnsafeMutableRawPointer?,readFn:UnsafeMutableRawPointer?,reflowFn:UnsafeMutableRawPointer?,layoutFn:UnsafeMutableRawPointer?,styleFn:UnsafeMutableRawPointer?
     let count:Int
 
     init(_ url: URL, engine: String) throws {
@@ -34,7 +34,7 @@ final class NativeFile {
             guard let document = open(url.path, &error) else { throw ReadError(String(cString: error).isEmpty ? "Cannot decode this file" : String(cString: error)) }
             let count = Int(pageCount(document))
             guard count > 0 else { close(document); throw ReadError("Document has no readable content") }
-            self.library=library;self.document=document;self.closeDocument=close;self.render=dlsym(library,"lf_render").map{unsafeBitCast($0,to:Render.self)};self.textFn=dlsym(library,"lf_text");self.pathFn=dlsym(library,"lf_path");self.readFn=dlsym(library,"lf_read");self.count=count
+            self.library=library;self.document=document;self.closeDocument=close;self.render=dlsym(library,"lf_render").map{unsafeBitCast($0,to:Render.self)};self.textFn=dlsym(library,"lf_text");self.pathFn=dlsym(library,"lf_path");self.readFn=dlsym(library,"lf_read");self.reflowFn=dlsym(library,"lf_reflow");self.layoutFn=dlsym(library,"lf_layout");self.styleFn=dlsym(library,"lf_style");self.count=count
         } catch { dlclose(library); throw error }
     }
     deinit { closeDocument(document); dlclose(library) }
@@ -61,6 +61,18 @@ final class NativeFile {
         return image
     }
     var hasText:Bool{textFn != nil}
+    var isReflowable:Bool{
+        typealias Get=@convention(c)(UnsafeMutableRawPointer)->Int32
+        guard let reflowFn else{return false};return unsafeBitCast(reflowFn,to:Get.self)(document) != 0
+    }
+    func style(_ css:String){
+        typealias Set=@convention(c)(UnsafeMutableRawPointer,UnsafePointer<CChar>)->Void
+        guard let styleFn else{return};css.withCString{unsafeBitCast(styleFn,to:Set.self)(document,$0)}
+    }
+    func layout(width:Double=420,height:Double=595,fontSize:Double=11){
+        typealias Set=@convention(c)(UnsafeMutableRawPointer,Float,Float,Float)->Void
+        guard let layoutFn else{return};unsafeBitCast(layoutFn,to:Set.self)(document,Float(width),Float(height),Float(fontSize))
+    }
     func text(_ page: Int) -> String? {
         typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32) -> UnsafeMutablePointer<CChar>?
         guard let fn=textFn else{return nil};let get=unsafeBitCast(fn,to:Get.self);guard let p=get(document,Int32(page)) else{return nil}

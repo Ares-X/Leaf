@@ -13,6 +13,8 @@ public extension Format{
         func has(_ bytes:[UInt8],_ off:Int=0)->Bool{off>=0 && d.count>=off+bytes.count && d[off..<off+bytes.count].elementsEqual(bytes)}
         func ascii(_ s:String,_ off:Int=0)->Bool{has(Array(s.utf8),off)}
         if d.range(of:Data("%PDF-".utf8),in:d.startIndex..<min(d.endIndex,d.startIndex+1024)) != nil{return .pdf}
+        if ascii("Rar!\u{1a}\u{07}\u{00}") || has([0x52,0x61,0x72,0x21,0x1a,0x07,0x01,0x00]) || has([0x37,0x7a,0xbc,0xaf,0x27,0x1c]) || has([0x50,0x4b,0x03,0x04]){return nil}
+        if ascii("ITOLITLS"){return .lit}
         if ascii("ITSF"){return .chm}
         if ascii("AT&T"){return .djvu}
         if ascii("BOOKMOBI",60){return .book}

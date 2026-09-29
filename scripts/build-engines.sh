@@ -11,11 +11,11 @@ if ! git -C "$MU" cat-file -e "$REV^{commit}" 2>/dev/null; then git -C "$MU" fet
 git -C "$MU" checkout -q --detach "$REV"
 git -C "$MU" submodule update --init --recursive --depth 1
 FLAGS=(-Os -fPIC -fvisibility=hidden -mmacosx-version-min=13.0)
-# PDFKit handles PDF; Foliate handles flowing books; libarchive handles comics.
-# Keep XPS, SVG and image codecs; omit duplicate readers, JS, OCR, office export and barcode code.
-FEATURES='-DFZ_ENABLE_PDF=0 -DFZ_ENABLE_CBZ=0 -DFZ_ENABLE_OCR_OUTPUT=0 -DFZ_ENABLE_ODT_OUTPUT=0'
+# Follow Sumatra's current engine direction: MuPDF owns reflowable books and fixed document formats.
+# Keep PDF disabled because macOS PDFKit provides the native PDF experience; omit JS/OCR/export/barcode only.
+FEATURES='-DFZ_ENABLE_PDF=0 -DFZ_ENABLE_OCR_OUTPUT=0 -DFZ_ENABLE_ODT_OUTPUT=0'
 make -C "$MU" -j"$(sysctl -n hw.logicalcpu)" libs build=small OUT="$ROOT/build/mupdf" \
-    html=no mujs=no extract=no tesseract=no barcode=no \
+    mujs=no extract=no tesseract=no barcode=no \
     XCFLAGS="${FLAGS[*]} $FEATURES"
 cc "${FLAGS[@]}" -I"$MU/include" -c Native/MuPDF.c -o "$OUT/MuPDF.o"
 c++ -dynamiclib -Wl,-dead_strip -mmacosx-version-min=13.0 "$OUT/MuPDF.o" \

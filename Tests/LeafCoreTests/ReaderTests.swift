@@ -26,6 +26,8 @@ final class ReaderTests:XCTestCase{
         var mobi=Data(repeating:0,count:68);mobi.replaceSubrange(60..<68,with:Data("BOOKMOBI".utf8));XCTAssertEqual(Format.sniff(mobi),.book)
         XCTAssertEqual(Format.sniff(Data([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])),.image)
         XCTAssertEqual(Format.sniff(Data("ITSF".utf8)),.chm)
+        XCTAssertEqual(Format.sniff(Data("ITOLITLS".utf8)),.lit)
+        XCTAssertNil(Format.sniff(Data([0x50,0x4b,0x03,0x04,0,0,0,0])))
         var replica=Data(repeating:0,count:68);replica.replaceSubrange(60..<68,with:Data("BOOKMOBI".utf8))
         XCTAssertEqual(Format.resolve("book.azw4",prefix:replica),.replica)
         XCTAssertEqual(Format.resolve("wrong.txt",prefix:Data("%PDF-1.7".utf8)),.pdf)
