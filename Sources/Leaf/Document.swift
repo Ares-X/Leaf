@@ -12,9 +12,8 @@ struct ReadingDocument{
         try Task.checkCancellation()
         if (try? url.resourceValues(forKeys:[.isDirectoryKey]).isDirectory)==true{let f=URL(fileURLWithPath:url.path,isDirectory:true);return .init(url:f,content:.pages(try Pages(f,format:.comic)))}
         var format=Format.detect(url.lastPathComponent);let fh=try FileHandle(forReadingFrom:url),prefix=try fh.read(upToCount:128) ?? Data();try fh.close()
-        if prefix.starts(with:Data("%PDF-".utf8)){format=.pdf}
-        else if url.pathExtension.lowercased()=="ai"{format=.postscript}
-        else if prefix.count>=68{let id=String(decoding:prefix[60..<68],as:UTF8.self);if id=="BOOKMOBI",format == .palm{format=.book};if ["TEXtREAd","TEXtTlDc","DataPlkr"].contains(id){format=.palm}}
+        if let sniffed=Format.sniff(prefix){format=sniffed}
+        if url.pathExtension.lowercased()=="ai",format == .pdf{format=.postscript}
         switch format{
         case .pdf:return .init(url:url,content:.pdf(url,nil))
         case .replica:return .init(url:url,content:.pdf(url,try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe),replica:true)))
