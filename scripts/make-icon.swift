@@ -3,7 +3,7 @@ import AppKit
 import Foundation
 
 let out = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "build/Leaf.iconset", isDirectory: true)
-try FileManager.default.removeItem(at: out)
+try? FileManager.default.removeItem(at: out)
 try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
 let outer:[(CGFloat,CGFloat)] = [
