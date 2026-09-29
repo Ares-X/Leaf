@@ -1,0 +1,40 @@
+#if os(macOS)
+import SwiftUI
+import WebKit
+import CryptoKit
+import UniformTypeIdentifiers
+import LeafCore
+
+actor BookSource{
+    let url:URL,format:Format;private let archive:Archive?,chm:NativeFile?,root:URL?;private let chmIndex:[String:Int],entries:[Archive.Entry];private let file:FileHandle,size:UInt64
+    init(_ url:URL,format:Format,root:URL?=nil)throws{self.url=url;self.format=format;self.root=root;file=try FileHandle(forReadingFrom:url);size=try file.seekToEnd();let ext=url.pathExtension.lowercased()
+        if format == .book && ["epub","fb2z","fbz","zfb2","zip"].contains(ext){let a=try Archive(url);archive=a;entries=a.entries;chm=nil;chmIndex=[:]}
+        else if format == .chm{let c=try NativeFile(url,engine:"CHM");chm=c;archive=nil;var m:[String:Int]=[:],p:[Archive.Entry]=[];for i in 0..<c.count{let x=String(try c.path(i).drop(while:{$0=="/"}));m[x.lowercased()]=i;p.append(.init(name:x,size:0))};chmIndex=m;entries=p}else if let root{archive=nil;chm=nil;chmIndex=[:];let f=(FileManager.default.enumerator(at:root,includingPropertiesForKeys:[.fileSizeKey],options:[.skipsHiddenFiles])?.allObjects as? [URL]) ?? [];entries=f.filter{!$0.hasDirectoryPath}.map{let n=String($0.path.dropFirst(root.path.count+1)),z=(try? $0.resourceValues(forKeys:[.fileSizeKey]).fileSize) ?? 0;return .init(name:n,size:Int64(z))}}
+        else{archive=nil;chm=nil;chmIndex=[:];entries=[]}}
+    deinit{try? file.close()}
+    func response(_ r:URL)throws->Data{try Task.checkCancellation();let q=URLComponents(url:r,resolvingAgainstBaseURL:false)?.queryItems ?? [];func p(_ n:String)->String?{q.first{$0.name==n}?.value}
+        if r.path=="/meta"{return try JSONSerialization.data(withJSONObject:["name":url.lastPathComponent,"size":size,"format":format.rawValue,"entries":entries.map{["filename":$0.name,"size":$0.size]}])}
+        if r.path=="/sha1"{return Data(Insecure.SHA1.hash(data:Data((p("text") ?? "").utf8)))}
+        if r.path=="/raw"{let a=min(size,UInt64(p("start") ?? "0") ?? 0),b=min(size,UInt64(p("end") ?? String(size)) ?? size);guard b>=a else{throw ReadError("Invalid book slice")};try file.seek(toOffset:a);return try file.read(upToCount:Int(b-a)) ?? Data()}
+        let n=String(r.path.dropFirst("/entry/".count));if r.path.hasPrefix("/entry/"){if let root{let f=root.appendingPathComponent(n).standardizedFileURL;guard f.path.hasPrefix(root.standardizedFileURL.path+"/")else{throw ReadError("Invalid book path")};return try Data(contentsOf:f)};if let archive{return try archive.data(n)};if let chm,let i=chmIndex[n.lowercased()]{let d=try chm.data(i);return["htm","html","hhc","hhk","css"].contains((n as NSString).pathExtension.lowercased()) ? Data(ReadingDocument.decode(d).utf8):d}}
+        if r.path.hasPrefix("/files/"),[.html,.markdown].contains(format){let root=url.deletingLastPathComponent().resolvingSymlinksInPath(),f=root.appendingPathComponent(String(r.path.dropFirst(7))).standardizedFileURL.resolvingSymlinksInPath();guard f.path.hasPrefix(root.path+"/")else{throw ReadError("Resource is outside the document folder")};return try Data(contentsOf:f)}
+        throw ReadError("Book resource not found")}
+}
+
+@MainActor struct BookReader:NSViewRepresentable{
+    @ObservedObject var state:ReaderState;let source:BookSource
+    func makeCoordinator()->Coordinator{Coordinator(state:state,source:source)}
+    func makeNSView(context:Context)->WKWebView{let c=context.coordinator,x=WKWebViewConfiguration();x.websiteDataStore = .nonPersistent();x.setURLSchemeHandler(c,forURLScheme:"leaf");x.userContentController.add(c,name:"leaf")
+        let l=(try? JSONSerialization.data(withJSONObject:[state.cfi ?? ""])) ?? Data("[\"\"]".utf8),style="\(state.font)|\(state.fontSize)|\(state.lineHeight)|\(state.margin)|\(state.theme)"
+        let s="window.leafLocation=\(String(decoding:l,as:UTF8.self))[0];window.leafSpread=\(state.spread ? 2:1);window.leafFlow='\(state.flow=="continuous" ? "scrolled":"paginated")';window.leafStyle='\(style)';"
+        x.userContentController.addUserScript(WKUserScript(source:s,injectionTime:.atDocumentStart,forMainFrameOnly:true));let v=WKWebView(frame:.zero,configuration:x);v.navigationDelegate=c;v.load(URLRequest(url:URL(string:"leaf://reader/reader.html")!));return v}
+    func updateNSView(_ v:WKWebView,context:Context){guard context.coordinator.command != state.command.id else{return};context.coordinator.command=state.command.id;if state.command.name=="print"{v.printView(nil);return};let m:[String:Any]=["name":state.command.name,"text":state.command.text,"number":state.command.number];if let d=try? JSONSerialization.data(withJSONObject:m){v.evaluateJavaScript("window.leafCommand?.(\(String(decoding:d,as:UTF8.self)))")}}
+    static func dismantleNSView(_ v:WKWebView,coordinator:Coordinator){coordinator.requests.values.forEach{$0.cancel()};coordinator.requests.removeAll();v.configuration.userContentController.removeScriptMessageHandler(forName:"leaf");v.navigationDelegate=nil;v.stopLoading()}
+    @MainActor final class Coordinator:NSObject,WKURLSchemeHandler,WKScriptMessageHandler,WKNavigationDelegate{
+        let state:ReaderState,source:BookSource;var command:UUID?,requests:[ObjectIdentifier:Task<Void,Never>]=[:];init(state:ReaderState,source:BookSource){self.state=state;self.source=source}
+        func webView(_ v:WKWebView,start t:WKURLSchemeTask){let id=ObjectIdentifier(t);requests[id]=Task{@MainActor in do{guard let u=t.request.url else{throw ReadError("Missing resource URL")};let d:Data;if u.host=="reader"{let p=Bundle.main.resourceURL?.appendingPathComponent("Reader"),root=p.flatMap{FileManager.default.fileExists(atPath:$0.path) ? $0:nil} ?? Bundle.module.url(forResource:"Reader",withExtension:nil)!,f=root.appendingPathComponent(String(u.path.dropFirst())).standardizedFileURL.resolvingSymlinksInPath();d=try await Task.detached{try Data(contentsOf:f)}.value}else if u.host=="book"{d=try await source.response(u)}else{throw ReadError("Unknown resource host")};guard !Task.isCancelled,requests[id] != nil else{return};let mime=["js":"text/javascript","hhc":"text/html","hhk":"text/html"][u.pathExtension] ?? UTType(filenameExtension:u.pathExtension)?.preferredMIMEType ?? "application/octet-stream";t.didReceive(HTTPURLResponse(url:u,statusCode:200,httpVersion:"HTTP/1.1",headerFields:["Content-Type":mime,"Content-Length":String(d.count),"Access-Control-Allow-Origin":"*"])!);t.didReceive(d);t.didFinish()}catch{if !Task.isCancelled,requests[id] != nil{t.didFailWithError(error)}};requests.removeValue(forKey:id)}}
+        func webView(_ v:WKWebView,stop t:WKURLSchemeTask){requests.removeValue(forKey:ObjectIdentifier(t))?.cancel()}
+        func userContentController(_ c:WKUserContentController,didReceive m:WKScriptMessage){guard m.frameInfo.isMainFrame,let b=m.body as? [String:Any],let t=b["type"] as? String else{return};switch t{case"location":state.cfi=b["cfi"] as? String;state.fraction=b["fraction"] as? Double ?? 0;state.persist();case"toc","results":if let i=b["items"],let d=try? JSONSerialization.data(withJSONObject:i),let x=try? JSONDecoder().decode([ContentsItem].self,from:d){state.outline=x};if t=="results"{state.showContents=true};case"status":state.status=b["message"] as? String ?? "";case"error":state.error=b["message"] as? String ?? "Unable to render book";case"external":if let h=b["href"] as? String,let u=URL(string:h),["https","http","mailto"].contains(u.scheme){NSWorkspace.shared.open(u)};default:break}}
+        func webView(_ v:WKWebView,decidePolicyFor a:WKNavigationAction,decisionHandler:@escaping(WKNavigationActionPolicy)->Void){decisionHandler(["leaf","blob","about","data"].contains(a.request.url?.scheme ?? "") ? .allow:.cancel)}
+    }}
+#endif

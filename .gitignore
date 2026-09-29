@@ -1,7 +1,10 @@
+.DS_Store
 .build/
 .swiftpm/
-.DS_Store
+build/
 dist/
-DerivedData/
-*.xcodeproj/project.xcworkspace/xcuserdata/
-*.xcuserstate
+Sources/Leaf/Resources/Reader/foliate/
+Sources/Leaf/Resources/Reader/marked.js
+Sources/Leaf/Resources/Reader/Marked-LICENSE.md
+Sources/Leaf/Resources/Reader/versions.txt
+__pycache__/
