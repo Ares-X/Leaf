@@ -21,6 +21,7 @@ No Win32 renderer or Windows DLL is copied into the macOS app.
 | DjVuLibre | [upstream](https://djvu.sourceforge.net/) | GPL-2.0-or-later; linked native decoder |
 | CHMLib | [upstream](https://github.com/jedwing/CHMLib) | LGPL-2.1-or-later; linked native decoder |
 | libjxl | [upstream](https://github.com/libjxl/libjxl) | BSD-3-Clause; linked native decoder |
+| ConvertLIT / clit | Homebrew convertlit 1.8 | GPL-2.0-or-later; tiny bundled helper for Microsoft Reader LIT → OEB/EPUB |
 | Ghostscript | [upstream](https://ghostscript.com/) | Separate, optional installation; not bundled by these scripts |
 
 Build scripts retain library notices, copyright files and Homebrew installation
