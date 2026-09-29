@@ -38,22 +38,25 @@ import PDFKit
         scroll.contentView.postsBoundsChangedNotifications=true
         NotificationCenter.default.addObserver(c,selector:#selector(Coordinator.scrolled),name:NSView.boundsDidChangeNotification,object:scroll.contentView)
         c.style(force:true);state.outlineBusy=true
+        let scan=Task.detached(priority:.utility){
+            var lines=[0];lines.reserveCapacity(max(1,content.utf16.count/80))
+            for (i,x) in content.utf16.enumerated(){if i & 0xffff == 0,Task.isCancelled{return([Int](),[DetectedChapter]())};if x==10{lines.append(i+1)}}
+            guard !Task.isCancelled else{return([Int](),[DetectedChapter]())}
+            return (lines,ChapterDetector.detect(content))
+        }
+        c.scanTask=scan
         Task{@MainActor in
-            let scan=await Task.detached(priority:.utility){
-                var lines=[0];lines.reserveCapacity(max(1,content.utf16.count/80))
-                for (i,x) in content.utf16.enumerated() where x==10{if Task.isCancelled{return(lines,[])};lines.append(i+1)}
-                return (lines,ChapterDetector.detect(content))
-            }.value
-            guard c.active else{return}
-            c.lines=scan.0;c.indexed=true;state.count=scan.0.count;c.go(state.page)
-            state.outline=scan.1.map{.init(title:$0.title,target:String($0.line),depth:$0.depth)}
+            let result=await scan.value
+            guard c.active,!scan.isCancelled,!result.0.isEmpty else{return}
+            c.lines=result.0;c.indexed=true;state.count=result.0.count;c.go(state.page)
+            state.outline=result.1.map{.init(title:$0.title,target:String($0.line),depth:$0.depth)}
             state.outlineBusy=false
         }
         return scroll
     }
     func updateNSView(_ s:NSScrollView,context:Context){let c=context.coordinator;c.style();guard c.command != state.command.id else{return};c.command=state.command.id;switch state.command.name{case"zoom":c.zoom=state.command.number;c.style();case"fit":c.zoom=1;c.style();case"style":c.style();case"page","href":c.go(state.command.name=="href" ? Int(state.command.text) ?? 0:Int(state.command.number));case"find":c.find(state.command.text);case"print":if let v=c.view{NSPrintOperation(view:v).run()};default:break}}
-    static func dismantleNSView(_ v:NSScrollView,coordinator:Coordinator){coordinator.active=false;coordinator.state.outlineBusy=false;NotificationCenter.default.removeObserver(coordinator)}
-    @MainActor final class Coordinator:NSObject{let state:ReaderState;weak var view:NSTextView?;var active=true,indexed=false,lines=[0],command:UUID?,zoom=1.0,styleKey="";init(_ s:ReaderState){state=s}
+    static func dismantleNSView(_ v:NSScrollView,coordinator:Coordinator){coordinator.active=false;coordinator.scanTask?.cancel();coordinator.state.outlineBusy=false;NotificationCenter.default.removeObserver(coordinator)}
+    @MainActor final class Coordinator:NSObject{let state:ReaderState;weak var view:NSTextView?;var active=true,indexed=false,lines=[0],command:UUID?,zoom=1.0,styleKey="";var scanTask:Task<([Int],[DetectedChapter]),Never>?;init(_ s:ReaderState){state=s}
         func style(force:Bool=false){guard let v=view else{return};let key="\(state.font)|\(state.fontSize)|\(state.lineHeight)|\(state.margin)|\(state.theme)|\(zoom)";if !force,key==styleKey{return};styleKey=key;let size=state.fontSize*zoom,name=state.font=="serif" ? "New York":state.font=="monospace" ? "SF Mono":nil;v.font=name.flatMap{NSFont(name:$0,size:size)} ?? .systemFont(ofSize:size);v.textContainerInset=NSSize(width:state.margin,height:max(16,state.margin/2));let p=NSMutableParagraphStyle();p.lineHeightMultiple=state.lineHeight;v.defaultParagraphStyle=p;v.typingAttributes[.paragraphStyle]=p;if v.string.utf16.count>0{v.textStorage?.addAttribute(.paragraphStyle,value:p,range:NSRange(location:0,length:v.string.utf16.count))};let dark=state.theme=="dark" || (state.theme=="system" && NSApp.effectiveAppearance.bestMatch(from:[.darkAqua,.aqua]) == .darkAqua);v.textColor=dark ? NSColor(white:0.86,alpha:1):.textColor;v.backgroundColor=dark ? NSColor(white:0.07,alpha:1):.textBackgroundColor}
         func go(_ n:Int){view?.scrollRangeToVisible(NSRange(location:lines[max(0,min(n,lines.count-1))],length:0))}
         func find(_ q:String){guard let v=view,!q.isEmpty else{return};let t=v.string as NSString,start=NSMaxRange(v.selectedRange());var r=t.range(of:q,options:.caseInsensitive,range:NSRange(location:min(start,t.length),length:max(0,t.length-start)));if r.location==NSNotFound{r=t.range(of:q,options:.caseInsensitive)};if r.location != NSNotFound{v.setSelectedRange(r);v.scrollRangeToVisible(r)}else{state.status="No matches"}}
