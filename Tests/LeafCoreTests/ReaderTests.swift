@@ -19,6 +19,15 @@ final class ReaderTests:XCTestCase{
         XCTAssertEqual(try LegacyText.palm(palm(mop),replica:true),pdf)
     }
     func testArchivePathSafety(){XCTAssertTrue(Archive.isSafeEntryName("OPS/chapter.xhtml"));XCTAssertFalse(Archive.isSafeEntryName("../escape.png"));XCTAssertFalse(Archive.isSafeEntryName("/absolute.png"));XCTAssertFalse(Archive.isSafeEntryName("a\\..\\escape.png"))}
+    func testZipSubtypeRouting()throws{
+        let fm=FileManager.default,temp=fm.temporaryDirectory.appendingPathComponent("LeafRouting-"+UUID().uuidString,isDirectory:true);try fm.createDirectory(at:temp,withIntermediateDirectories:true);defer{try? fm.removeItem(at:temp)}
+        func zip(_ name:String,_ files:[String:String])throws->URL{let dir=temp.appendingPathComponent(UUID().uuidString,isDirectory:true);try fm.createDirectory(at:dir,withIntermediateDirectories:true);for (path,text) in files{let u=dir.appendingPathComponent(path);try fm.createDirectory(at:u.deletingLastPathComponent(),withIntermediateDirectories:true);try Data(text.utf8).write(to:u)};let out=temp.appendingPathComponent(name);let p=Process();p.executableURL=URL(fileURLWithPath:"/usr/bin/zip");p.arguments=["-qr",out.path,"."];p.currentDirectoryURL=dir;try p.run();p.waitUntilExit();XCTAssertEqual(p.terminationStatus,0);return out}
+        if fm.isExecutableFile(atPath:"/usr/bin/zip"){
+            let epub=try zip("book.zip",["META-INF/container.xml":"x"]);let prefix=try Data(contentsOf:epub).prefix(2048);XCTAssertEqual(try Format.resolve(epub,prefix:Data(prefix)),.book)
+            let xps=try zip("doc.zip",["_rels/.rels":"x"]);XCTAssertEqual(try Format.resolve(xps,prefix:Data(try Data(contentsOf:xps).prefix(2048))),.mupdf)
+            let fb2=try zip("story.zip",["story.fb2":"<FictionBook/>"]);XCTAssertEqual(try Format.resolve(fb2,prefix:Data(try Data(contentsOf:fb2).prefix(2048))),.book)
+        }
+    }
     func testFormatMatrix(){XCTAssertEqual(Format.detect("BOOK.FB2.ZIP"),.book);XCTAssertEqual(Format.detect("icon.ICO"),.image);XCTAssertEqual(Format.detect("comic.CB7"),.comic);for e in Format.extensions{XCTAssertNotEqual(Format.detect("x."+e),.unknown,e)}}
 
     func testSignatureSniffing(){
