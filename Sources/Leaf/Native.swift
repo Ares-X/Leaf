@@ -61,7 +61,6 @@ final class NativeFile {
         return image
     }
     var hasText:Bool{textFn != nil}
-    var isReflowable:Bool{relayoutFn != nil}
     func relayout(fontSize:Double,lineHeight:Double,margin:Double,font:String)->Int?{
         typealias Layout=@convention(c)(UnsafeMutableRawPointer,Float,UnsafePointer<CChar>)->Int32
         guard let relayoutFn else{return nil}
