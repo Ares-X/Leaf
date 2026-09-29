@@ -7,7 +7,7 @@ import LeafCore
 actor Pages{
     private let archive:Archive?;private let names:[String];private let url:URL;private var native:NativeFile?;private let source:CGImageSource?;let count:Int;private var cache:[(String,CGImage)]=[]
     init(_ url:URL,format:Format)throws{self.url=url
-        if format == .comic && url.hasDirectoryPath{archive=nil;source=nil;let f=FileManager.default.enumerator(at:url,includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])?.allObjects as? [URL] ?? [];names=f.filter{Format.detect($0.lastPathComponent) == .image}.map{String($0.path.dropFirst(url.path.count+(url.path.hasSuffix("/") ? 0:1)))}.sorted{$0.localizedStandardCompare($1) == .orderedAscending};count=names.count}
+        if format == .comic && url.hasDirectoryPath{archive=nil;source=nil;let f=FileManager.default.enumerator(at:url,includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])?.allObjects as? [URL] ?? [];names=f.filter{Format.detect($0.lastPathComponent) == .image}.map{String($0.path.dropFirst(url.path.count+(url.path.hasSuffix("/") ? 0:1)))}.sorted{$0.compare($1,options:[.numeric,.caseInsensitive]) == .orderedAscending};count=names.count}
         else if format == .comic{let a=try Archive(url);archive=a;source=nil;names=url.pathExtension.lowercased()=="ora" ? a.entries.filter{$0.name=="mergedimage.png"}.map(\.name):a.images;count=names.count}
         else if format == .image,let s=CGImageSourceCreateWithURL(url as CFURL,[kCGImageSourceShouldCache:false] as CFDictionary){source=s;archive=nil;names=[];count=CGImageSourceGetCount(s)}
         else{source=nil;archive=nil;names=[];let n=try NativeFile(url,engine:format == .djvu ? "DjVu":(url.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF"));native=n;count=n.count}
