@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Bundle only linked dylibs, rewrite their paths, and generate Finder associations."""
-import json
 import plistlib
 import re
 import shutil
