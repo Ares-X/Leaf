@@ -11,6 +11,7 @@ struct SettingsView:View{
     @AppStorage("fontSize") private var fontSize=17.0
     @AppStorage("lineHeight") private var lineHeight=1.6
     @AppStorage("margin") private var margin=32.0
+    private var appearanceSignature:String{"\(theme)|\(font)|\(fontSize)|\(lineHeight)|\(margin)"}
     var body:some View{Form{
         Section("Appearance"){
             Picker("Theme",selection:$theme){Text("System").tag("system");Text("Light").tag("light");Text("Dark").tag("dark")}
@@ -26,6 +27,7 @@ struct SettingsView:View{
             LabeledContent("Line height"){Slider(value:$lineHeight,in:1...2.4,step:0.1).frame(width:190);Text(lineHeight,format:.number.precision(.fractionLength(1))).frame(width:30)}
             LabeledContent("Margin"){Slider(value:$margin,in:0...96,step:8).frame(width:190);Text("\(Int(margin))").monospacedDigit().frame(width:30)}
         }
-    }.formStyle(.grouped).padding().frame(width:460)}
+    }.formStyle(.grouped).padding().frame(width:460)
+      .onChange(of:appearanceSignature){_ in NotificationCenter.default.post(name:.leafAppearancePreferencesChanged,object:nil)}}
 }
 #endif
