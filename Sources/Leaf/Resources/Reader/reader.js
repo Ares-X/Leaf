@@ -87,7 +87,6 @@ window.leafCommand = async command => {
         }
     } catch (error) { post('error', { message: error.message }) }
 }
-view.addEventListener('relocate', ({ detail }) => post('location', { cfi: detail.cfi, fraction: detail.fraction ?? 0 }))
 view.addEventListener('external-link', event => { event.preventDefault(); post('external', { href: event.detail.href_ }) })
 view.addEventListener('load', ({ detail: { doc } }) => doc.addEventListener('keydown', event => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.target.closest('input,textarea,[contenteditable]')) return
