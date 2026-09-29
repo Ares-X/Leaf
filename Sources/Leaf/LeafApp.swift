@@ -80,7 +80,9 @@ struct ReadingPosition:Codable{var page=0}
         return "Fit Page"
     }
     func send(_ name:String,text:String="",number:Double=0){command = .init(name:name,text:text,number:number)}
-    func toggleFind(){showFind.toggle();if !showFind{status="";send("toc")}}
+    func showFindPanel(){guard supportsSearch else{return};showFind=true}
+    func closeFind(){showFind=false;status="";send("toc")}
+    func toggleFind(){showFind ? closeFind():showFindPanel()}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
         persist();requestGeneration+=1;let g=requestGeneration;loading?.cancel();busy=true;error=nil;status="Opening \(url.lastPathComponent)…"
