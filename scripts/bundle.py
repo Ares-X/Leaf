@@ -98,6 +98,8 @@ else: icon_name=None
 info = dict(CFBundleName='Leaf', CFBundleDisplayName='Leaf', CFBundleExecutable='Leaf',
             CFBundleIdentifier='dev.aresx.leaf', CFBundlePackageType='APPL',
             CFBundleShortVersionString='0.2.0', CFBundleVersion='2',
+            CFBundleGetInfoString='Leaf 0.2.0', NSHumanReadableCopyright='© 2026 Leaf contributors',
+            LSApplicationCategoryType='public.app-category.productivity',
             LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True,
             CFBundleDocumentTypes=[dict(CFBundleTypeName='Readable documents', CFBundleTypeRole='Viewer',
                  LSHandlerRank='Alternate', CFBundleTypeExtensions=sorted(set(' '.join(suffixes).split())))],
