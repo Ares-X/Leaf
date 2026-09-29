@@ -96,7 +96,7 @@ actor Pages{
                 ForEach(Array((state.rtl ? Array(images.reversed()):images).enumerated()),id:\.offset){_,image in page(image,size,scale,columns)}
             }.frame(minWidth:size.width,minHeight:size.height)
         }
-        .task(id:"\(state.page):\(target):\(state.spread):\(state.fit):\(state.zoom):\(state.rotation)"){
+        .task(id:"\(state.page):\(target):\(state.spread)"){
             do{
                 var r=[try await pages.image(state.page,width:target)]
                 if state.spread,state.page+1<state.count{r.append(try await pages.image(state.page+1,width:target))}
@@ -130,6 +130,6 @@ private struct WindowScale:NSViewRepresentable{ @Binding var scale:CGFloat;func 
 private struct PageOffsetKey:PreferenceKey{static var defaultValue:[Int:CGFloat]=[:];static func reduce(value:inout[Int:CGFloat],nextValue:()->[Int:CGFloat]){value.merge(nextValue(),uniquingKeysWith:{_,b in b})}}
 @MainActor private struct LazyPage:View{
     @ObservedObject var state:ReaderState;let pages:Pages,index:Int,width:Int,scale:CGFloat;@State private var image:CGImage?
-    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation))).scaleEffect(state.fit=="custom" ? state.zoom:1)}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).background(GeometryReader{g in Color.clear.preference(key:PageOffsetKey.self,value:[index:g.frame(in:.named("pages")).midY])}).task(id:"\(width):\(state.rotation):\(state.zoom)"){do{image=try await pages.image(index,width:width)}catch{if !Task.isCancelled{state.error=error.localizedDescription}}}.onDisappear{image=nil}}
+    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation))).scaleEffect(state.fit=="custom" ? state.zoom:1)}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).background(GeometryReader{g in Color.clear.preference(key:PageOffsetKey.self,value:[index:g.frame(in:.named("pages")).midY])}).task(id:width){do{image=try await pages.image(index,width:width)}catch{if !Task.isCancelled{state.error=error.localizedDescription}}}.onDisappear{image=nil}}
 }
 #endif
