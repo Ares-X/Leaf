@@ -69,6 +69,7 @@ struct ReadingPosition:Codable{var page=0}
     var hasDocument:Bool{document != nil}
     var canTurn:Bool{isCHM ? hasDocument:count>1}
     var canSaveCopy:Bool{document?.url.hasDirectoryPath == false}
+    var printsCurrentPageOnly:Bool{if case .pages=document?.content{return count>1};return false}
     var printsCurrentPageOnly:Bool{if case .pages=document?.content{return true};return false}
     var printTitle:String{printsCurrentPageOnly ? "Print Current Page…":"Print…"}
     var hasBookmark:Bool{guard let u=document?.url else{return false};return UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path) != nil}
