@@ -4,7 +4,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 FOLIATE=78914aef4466eb960965702401634c2cb348e9b1
-MARKED=15.0.12
 checkout() {
     local repository="$1" revision="$2" directory="$3"
     if [ ! -d "$directory/.git" ]; then git init -q "$directory"; git -C "$directory" remote add origin "$repository"; fi
@@ -21,12 +20,5 @@ for file in build/deps/foliate/*.js; do
 done
 cp build/deps/foliate/vendor/fflate.js "$DEST/foliate/vendor/"
 cp build/deps/foliate/LICENSE "$DEST/foliate/LICENSE"
-# npm's versioned published tarball includes the compiled, dependency-free ES module.
-TARBALL="build/deps/marked-$MARKED.tgz"
-if [ ! -s "$TARBALL" ]; then curl -fL --retry 3 "https://registry.npmjs.org/marked/-/marked-$MARKED.tgz" -o "$TARBALL.tmp"; mv "$TARBALL.tmp" "$TARBALL"; fi
-mkdir -p build/deps/marked
-tar -xzf "$TARBALL" -C build/deps/marked
-cp build/deps/marked/package/lib/marked.esm.js "$DEST/marked.js"
-cp build/deps/marked/package/LICENSE.md "$DEST/Marked-LICENSE.md"
-printf 'foliate=%s\nmarked=%s\n' "$FOLIATE" "$MARKED" > "$DEST/versions.txt"
+printf 'foliate=%s\n' "$FOLIATE" > "$DEST/versions.txt"
 echo "Reader dependencies prepared. Subsequent builds reuse their local copies."
