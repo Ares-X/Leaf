@@ -36,13 +36,13 @@ public final class Archive:@unchecked Sendable{
         return !normalized.hasPrefix("/") && !normalized.split(separator:"/").contains("..")
     }
 
-    public func contains(_ name:String)->Bool{entries.contains{$0.name.caseInsensitiveCompare(name)== .orderedSame}}
+    public func contains(_ name:String)->Bool{entries.contains{$0.name.caseInsensitiveCompare(name) == .orderedSame}}
 
     public var images:[String]{
         entries.map(\.name).filter{
             Self.isSafeEntryName($0) &&
-            !$0.split(separator:"/").contains(where:{$0.hasPrefix(".") || $0=="__MACOSX"}) &&
-            (Format.detect($0)== .image || ["svg","jxr","hdp","wdp"].contains(($0 as NSString).pathExtension.lowercased()))
+            !$0.split(separator:"/").contains(where:{$0.hasPrefix(".") || $0 == "__MACOSX"}) &&
+            (Format.detect($0) == .image || ["svg","jxr","hdp","wdp"].contains(($0 as NSString).pathExtension.lowercased()))
         }.sorted{$0.compare($1,options:[.numeric,.caseInsensitive]) == .orderedAscending}
     }
 
