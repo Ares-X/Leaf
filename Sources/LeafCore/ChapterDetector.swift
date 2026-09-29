@@ -29,7 +29,7 @@ public enum ChapterDetector{
             let range=NSRange(title.startIndex..<title.endIndex,in:title)
             guard let family=patterns.firstIndex(where:{$0.firstMatch(in:title,range:range) != nil}) else{continue}
             let isolated=(i==0 || lines[i-1].trimmingCharacters(in:.whitespaces).isEmpty ? 1:0)+(i+1==lines.count || lines[i+1].trimmingCharacters(in:.whitespaces).isEmpty ? 1:0)
-            candidates.append((i,title,family*3+isolated))
+            candidates.append((i,title,family*3+isolated));if candidates.count>=5000{break}
         }
         guard !candidates.isEmpty else{return[]}
         var families:[Int:Int]=[:]
