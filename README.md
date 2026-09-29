@@ -8,7 +8,7 @@ Calibre/unar conversions with mature decoders and a small native shell.
 
 ## Reading
 
-Open/Finder/drop/recent files; contents; search; page or percentage navigation;
+Open/Finder/drop/recent files; contents; search; page/line navigation;
 zoom; actual/fit page/fit width; paged/continuous; two-page and right-to-left reading; GIF playback;
 font family/size, line height and margins for reflowable text; full screen;
 one bookmark per document; persistent page/text position.
@@ -50,7 +50,7 @@ standalone GIFs can play/pause. DRM is not removed. PDB is Palm DOC/MOBI rather
 than arbitrary Palm databases. The Print Replica adapter currently handles
 uncompressed/PalmDOC-compressed records, not every possible Kindle container.
 Publication JavaScript, CHM active content and arbitrary network resources are
-not executed. Fixed-layout EPUB/CHM compatibility still needs sample testing.
+not executed. Fixed-layout EPUB and CHM still need sample testing.
 
 ## What makes it small
 
