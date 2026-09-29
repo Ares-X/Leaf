@@ -11,6 +11,7 @@ public final class Archive:@unchecked Sendable{
 
     public let url:URL
     public let entries:[Entry]
+    private let positions:[String:Int]
     private let lock=NSLock()
     private var cursor:OpaquePointer?
     private var cursorIndex = -1
@@ -25,6 +26,7 @@ public final class Archive:@unchecked Sendable{
             result.append(.init(name:String(cString:name),size:archive_entry_size(entry)))
         }
         entries=result
+        positions=Dictionary(uniqueKeysWithValues:result.enumerated().map{($0.element.name,$0.offset)})
     }
 
     deinit{if let cursor{archive_read_free(cursor)}}
@@ -45,7 +47,7 @@ public final class Archive:@unchecked Sendable{
     }
 
     public func data(_ name:String)throws->Data{
-        guard Self.isSafeEntryName(name),let target=entries.firstIndex(where:{$0.name==name}) else{throw ReadError("Archive entry not found: \(name)")}
+        guard Self.isSafeEntryName(name),let target=positions[name] else{throw ReadError("Archive entry not found: \(name)")}
         lock.lock();defer{lock.unlock()}
         if cursor == nil || target <= cursorIndex{if let cursor{archive_read_free(cursor)};cursor=try Self.open(url);cursorIndex = -1}
         guard let cursor else{throw ReadError("Cannot read archive")}
