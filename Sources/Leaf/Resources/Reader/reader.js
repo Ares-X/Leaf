@@ -60,7 +60,6 @@ window.leafCommand = async command => {
         case 'next': await view.next(); break
         case 'prev': await view.prev(); break
         case 'href': await view.goTo(command.text); break
-        case 'fraction': await view.goToFraction(command.number); break
         case 'zoom': {
             const [family='system',size='17',line='1.6',margin='32',theme='system'] = String(window.leafStyle || '').split('|')
             style(`${family}|${Number(size) * command.number}|${line}|${margin}|${theme}`); break
