@@ -22,7 +22,7 @@ struct ReadingDocument{
         let format=try Format.resolve(url,prefix:prefix)
 
         switch format{
-        case .pdf:guard PDFDocument(url:url) != nil else{throw ReadError("Cannot read PDF: \(url.lastPathComponent)")};return .init(url:url,content:.pdf(url,nil))
+        case .pdf:return .init(url:url,content:.pdf(url,nil))
         case .replica:return .init(url:url,content:.pdf(url,try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe),replica:true)))
         case .text:return .init(url:url,content:.text(decode(try Data(contentsOf:url,options:.mappedIfSafe))))
         case .palm:
