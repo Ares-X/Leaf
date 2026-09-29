@@ -18,6 +18,7 @@ final class ReaderTests:XCTestCase{
         var mop=Data("%MOP".utf8);for n in [1,1,20,pdf.count]{var x=UInt32(n).bigEndian;withUnsafeBytes(of:&x){mop.append(contentsOf:$0)}};mop.append(pdf)
         XCTAssertEqual(try LegacyText.palm(palm(mop),replica:true),pdf)
     }
+    func testArchivePathSafety(){XCTAssertTrue(Archive.isSafeEntryName("OPS/chapter.xhtml"));XCTAssertFalse(Archive.isSafeEntryName("../escape.png"));XCTAssertFalse(Archive.isSafeEntryName("/absolute.png"));XCTAssertFalse(Archive.isSafeEntryName("a\\..\\escape.png"))}
     func testFormatMatrix(){XCTAssertEqual(Format.detect("BOOK.FB2.ZIP"),.book);XCTAssertEqual(Format.detect("icon.ICO"),.image);XCTAssertEqual(Format.detect("comic.CB7"),.comic);for e in Format.extensions{XCTAssertNotEqual(Format.detect("x."+e),.unknown,e)}}
 
     func testSignatureSniffing(){
@@ -25,5 +26,8 @@ final class ReaderTests:XCTestCase{
         var mobi=Data(repeating:0,count:68);mobi.replaceSubrange(60..<68,with:Data("BOOKMOBI".utf8));XCTAssertEqual(Format.sniff(mobi),.book)
         XCTAssertEqual(Format.sniff(Data([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])),.image)
         XCTAssertEqual(Format.sniff(Data("ITSF".utf8)),.chm)
+        var replica=Data(repeating:0,count:68);replica.replaceSubrange(60..<68,with:Data("BOOKMOBI".utf8))
+        XCTAssertEqual(Format.resolve("book.azw4",prefix:replica),.replica)
+        XCTAssertEqual(Format.resolve("wrong.txt",prefix:Data("%PDF-1.7".utf8)),.pdf)
     }
 }

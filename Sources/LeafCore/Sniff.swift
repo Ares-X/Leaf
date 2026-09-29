@@ -1,6 +1,12 @@
 import Foundation
 
 public extension Format{
+    static func resolve(_ name:String,prefix:Data)->Format{
+        let declared=detect(name)
+        if let sniffed=sniff(prefix),declared != .replica,declared != .lit{return sniffed}
+        return declared
+    }
+
     /// Small signature set mirrored from Sumatra's BSD GuessFileType.cpp.
     /// Extension routing still wins for ambiguous containers (ZIP/7z/RAR).
     static func sniff(_ d:Data)->Format?{

@@ -13,34 +13,120 @@ actor Pages{
         else{source=nil;archive=nil;names=[];let n=try NativeFile(url,engine:format == .djvu ? "DjVu":(url.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF"));native=n;count=n.count}
         guard count>0 else{throw ReadError("No readable pages found")}
     }
-    func image(_ page:Int,width:Int)throws->CGImage{try Task.checkCancellation();guard(0..<count).contains(page)else{throw ReadError("Page out of range")};let width=max(128,width),key="\(page):\(width)";if let i=cache.firstIndex(where:{$0.0==key}){let h=cache.remove(at:i);cache.append(h);return h.1};let image:CGImage
-        if let native{image=try native.image(page,width:width)}else{let data=try archive.map{try $0.data(names[page])} ?? (url.hasDirectoryPath ? Data(contentsOf:url.appendingPathComponent(names[page])):nil);let s=data.flatMap{CGImageSourceCreateWithData($0 as CFData,[kCGImageSourceShouldCache:false] as CFDictionary)} ?? source,index=source != nil ? page:0;let o:[CFString:Any]=[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:width,kCGImageSourceShouldCacheImmediately:true];if let s,let d=CGImageSourceCreateThumbnailAtIndex(s,index,o as CFDictionary){image=d}else if let data{let t=try TemporaryDirectory(),f=t.url.appendingPathComponent(URL(fileURLWithPath:names[page]).lastPathComponent);try data.write(to:f);image=try NativeFile(f,engine:f.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF").image(0,width:width)}else{throw ReadError("The installed image decoder cannot read this image")}}
+    func image(_ page:Int,width:Int)throws->CGImage{try Task.checkCancellation();guard(0..<count).contains(page)else{throw ReadError("Page out of range")};let width=max(128,min(16384,width)),key="\(page):\(width)";if let i=cache.firstIndex(where:{$0.0==key}){let h=cache.remove(at:i);cache.append(h);return h.1};let image:CGImage
+        if let native{image=try native.image(page,width:width)}else{let data=try archive.map{try $0.data(names[page])} ?? (url.hasDirectoryPath ? Data(contentsOf:url.appendingPathComponent(names[page])):nil);let s=data.flatMap{CGImageSourceCreateWithData($0 as CFData,[kCGImageSourceShouldCache:false] as CFDictionary)} ?? source,index=source != nil ? page:0;let o:[CFString:Any]=[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:width,kCGImageSourceShouldCacheImmediately:true];if let s,let d=CGImageSourceCreateThumbnailAtIndex(s,index,o as CFDictionary){image=d}else if let data{let t=try TemporaryDirectory(),f=t.url.appendingPathComponent(URL(fileURLWithPath:names[page]).lastPathComponent);try data.write(to:f);image=try NativeFile(f,engine:f.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF").image(0,width:width)}else if source != nil{image=try NativeFile(url,engine:url.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF").image(page,width:width)}else{throw ReadError("The installed image decoder cannot read this image")}}
         cache.append((key,image));while cache.count>3 || (cache.count>1 && cache.reduce(0,{$0+$1.1.bytesPerRow*$1.1.height})>64*1024*1024){cache.removeFirst()};return image}
     func frameDelay(_ p:Int)->Double?{guard url.pathExtension.lowercased()=="gif",count>1,let source,let props=CGImageSourceCopyPropertiesAtIndex(source,p,nil) as? [CFString:Any],let gif=props[kCGImagePropertyGIFDictionary] as? [CFString:Any]else{return nil};return max(0.02,gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? gif[kCGImagePropertyGIFDelayTime] as? Double ?? 0.1)}
-    func find(_ q:String,after p:Int)->Int?{guard let native,native.hasText,!q.isEmpty else{return nil};for o in 1...count{if Task.isCancelled{return nil};let i=(p+o)%count;if native.text(i)?.localizedCaseInsensitiveContains(q)==true{return i}};return nil}
+    func find(_ q:String,after p:Int)->Int?{guard let native,native.hasText,!q.isEmpty,count>0 else{return nil};for o in 1...count{if Task.isCancelled{return nil};let i=(p+o)%count;if native.text(i)?.localizedCaseInsensitiveContains(q)==true{return i}};return nil}
 }
 
 @MainActor struct RasterReader:View{
-    @ObservedObject var state:ReaderState;let pages:Pages;@State private var images:[CGImage]=[],isAnimation=false,playing=false,pinchStart:Double?,scale:CGFloat=2
-    var body:some View{GeometryReader{g in
-        let columns=max(1,state.spread ? 2:1),target=state.fit=="actual" ? 4096:max(128,Int(g.size.width*scale*max(1,state.zoom)/CGFloat(columns)))
-        ZStack{background
-            if state.flow=="continuous"{ScrollViewReader{proxy in ScrollView(.vertical){LazyVStack(spacing:4){ForEach(0..<state.count,id:\.self){i in LazyPage(state:state,pages:pages,index:i,width:target,scale:scale).id(i)}}}.coordinateSpace(name:"pages").onPreferenceChange(PageOffsetKey.self){v in if let i=v.min(by:{abs($0.value)<abs($1.value)})?.key,state.page != i{state.page=i;state.persist()}}.onChange(of:state.command.id){_ in if state.command.name=="page"{withAnimation{proxy.scrollTo(Int(state.command.number),anchor:.top)}}}}}
-            else{ScrollView([.horizontal,.vertical]){HStack(spacing:state.spread ? 4:0){ForEach(Array((state.rtl ? Array(images.reversed()):images).enumerated()),id:\.offset){_,image in page(image,g.size,scale,columns)}}.frame(minWidth:g.size.width,minHeight:g.size.height)}
-                .task(id:"\(state.page):\(target):\(state.spread):\(state.fit):\(state.zoom):\(state.rotation)"){do{var r=[try await pages.image(state.page,width:target)];if state.spread,state.page+1<state.count{r.append(try await pages.image(state.page+1,width:target))};guard !Task.isCancelled else{return};images=r;if state.page+r.count<state.count{_=try? await pages.image(state.page+r.count,width:target)}}catch{if !Task.isCancelled{state.error=error.localizedDescription}}}}
-        }.focusable().onMoveCommand{d in if d == .left{state.turn(state.rtl ? 1:-1)};if d == .right{state.turn(state.rtl ? -1:1)}}
-        .gesture(MagnificationGesture().onChanged{v in if pinchStart==nil{pinchStart=state.zoom};state.setZoom((pinchStart ?? state.zoom)*Double(v))}.onEnded{_ in pinchStart=nil})
-        .simultaneousGesture(DragGesture(minimumDistance:40).onEnded{v in guard abs(v.translation.width)>abs(v.translation.height),abs(v.translation.width)>80 else{return};state.turn(v.translation.width<0 ? (state.rtl ? -1:1):(state.rtl ? 1:-1))})
-    }.background(WindowScale(scale:$scale).frame(width:0,height:0)).overlay(alignment:.topTrailing){if isAnimation{Button(playing ? "Pause":"Play"){playing.toggle()}.padding(8)}}.task{isAnimation=await pages.frameDelay(0) != nil;playing=isAnimation}
-    .task(id:playing){while playing,!Task.isCancelled,let delay=await pages.frameDelay(state.page){do{try await Task.sleep(nanoseconds:UInt64(delay*1_000_000_000))}catch{return};guard !Task.isCancelled else{return};state.page=(state.page+1)%max(1,state.count)}}
-    .onChange(of:state.command.id){_ in if state.command.name=="print"{Task{if let image=try? await pages.image(state.page,width:2400){let v=NSImageView();v.image=NSImage(cgImage:image,size:.zero);v.imageScaling=.scaleProportionallyUpOrDown;v.frame=NSRect(x:0,y:0,width:612,height:792);NSPrintOperation(view:v).run()}}}else if state.command.name=="find"{let q=state.command.text,p=state.page,id=state.command.id;Task{let m=await pages.find(q,after:p);guard state.command.id==id,case .pages(let a)?=state.document?.content,a===pages else{return};if let m{state.page=m;state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}}}
+    @ObservedObject var state:ReaderState
+    let pages:Pages
+    @State private var images:[CGImage]=[]
+    @State private var isAnimation=false
+    @State private var playing=false
+    @State private var pinchStart:Double?
+    @State private var scale:CGFloat=2
+    @State private var searchTask:Task<Void,Never>?
+
+    var body:some View{
+        GeometryReader{g in
+            let columns=state.spread ? 2:1
+            let logicalWidth=max(128,g.size.width*CGFloat(state.fit=="custom" ? state.zoom:1)/CGFloat(columns))
+            let target=max(128,min(16384,Int(logicalWidth*scale)))
+            ZStack{
+                background
+                if state.flow=="continuous"{continuous(target:target)}
+                else{paged(size:g.size,target:target,scale:scale,columns:columns)}
+            }
+            .focusable()
+            .onMoveCommand{d in
+                if d == .left{state.turn(state.rtl ? 1:-1)}
+                if d == .right{state.turn(state.rtl ? -1:1)}
+            }
+            .gesture(MagnificationGesture().onChanged{v in
+                if pinchStart==nil{pinchStart=state.zoom}
+                state.setZoom((pinchStart ?? state.zoom)*Double(v))
+            }.onEnded{_ in pinchStart=nil})
+            .simultaneousGesture(DragGesture(minimumDistance:40).onEnded{v in
+                guard state.flow != "continuous",abs(v.translation.width)>abs(v.translation.height),abs(v.translation.width)>80 else{return}
+                state.turn(v.translation.width<0 ? (state.rtl ? -1:1):(state.rtl ? 1:-1))
+            })
+        }
+        .background(WindowScale(scale:$scale).frame(width:0,height:0))
+        .overlay(alignment:.topTrailing){if isAnimation{Button(playing ? "Pause":"Play"){playing.toggle()}.padding(8)}}
+        .task{isAnimation=await pages.frameDelay(0) != nil;playing=isAnimation}
+        .task(id:playing){while playing,!Task.isCancelled,let delay=await pages.frameDelay(state.page){do{try await Task.sleep(nanoseconds:UInt64(delay*1_000_000_000))}catch{return};guard !Task.isCancelled else{return};state.page=(state.page+1)%max(1,state.count)}}
+        .onChange(of:state.command.id){_ in handleCommand()}
+        .onDisappear{searchTask?.cancel()}
+    }
+
+    @ViewBuilder func continuous(target:Int)->some View{
+        ScrollViewReader{proxy in
+            ScrollView(.vertical){
+                LazyVStack(spacing:4){
+                    if state.spread{
+                        ForEach(Array(stride(from:0,to:state.count,by:2)),id:\.self){i in
+                            HStack(alignment:.top,spacing:4){
+                                let pair=state.rtl ? [i+1,i]:[i,i+1]
+                                ForEach(pair.filter{$0<state.count},id:\.self){j in LazyPage(state:state,pages:pages,index:j,width:target,scale:scale).id(j)}
+                            }.id(i)
+                        }
+                    }else{
+                        ForEach(0..<state.count,id:\.self){i in LazyPage(state:state,pages:pages,index:i,width:target,scale:scale).id(i)}
+                    }
+                }
+                .coordinateSpace(name:"pages")
+                .onPreferenceChange(PageOffsetKey.self){v in
+                    if let i=v.min(by:{abs($0.value)<abs($1.value)})?.key,state.page != i{state.page=i;state.persist()}
+                }
+            }
+            .onAppear{proxy.scrollTo(state.spread ? state.page-(state.page%2):state.page,anchor:.top)}
+            .onChange(of:state.command.id){_ in
+                if state.command.name=="page"{withAnimation{let p=Int(state.command.number);proxy.scrollTo(state.spread ? p-(p%2):p,anchor:.top)}}
+            }
+        }
+    }
+
+    func paged(size:CGSize,target:Int,scale:CGFloat,columns:Int)->some View{
+        ScrollView([.horizontal,.vertical]){
+            HStack(spacing:state.spread ? 4:0){
+                ForEach(Array((state.rtl ? Array(images.reversed()):images).enumerated()),id:\.offset){_,image in page(image,size,scale,columns)}
+            }.frame(minWidth:size.width,minHeight:size.height)
+        }
+        .task(id:"\(state.page):\(target):\(state.spread):\(state.fit):\(state.zoom):\(state.rotation)"){
+            do{
+                var r=[try await pages.image(state.page,width:target)]
+                if state.spread,state.page+1<state.count{r.append(try await pages.image(state.page+1,width:target))}
+                guard !Task.isCancelled else{return};images=r
+                if state.page+r.count<state.count{_=try? await pages.image(state.page+r.count,width:target)}
+            }catch{if !Task.isCancelled{state.error=error.localizedDescription}}
+        }
+    }
+
+    func handleCommand(){
+        if state.command.name=="print"{
+            Task{if let image=try? await pages.image(state.page,width:2400){let v=NSImageView();v.image=NSImage(cgImage:image,size:.zero);v.imageScaling = .scaleProportionallyUpOrDown;v.frame=NSRect(x:0,y:0,width:612,height:792);NSPrintOperation(view:v).run()}}
+        }else if state.command.name=="find"{
+            searchTask?.cancel();let q=state.command.text,p=state.page,id=state.command.id
+            searchTask=Task{let m=await pages.find(q,after:p);guard !Task.isCancelled,state.command.id==id,case .pages(let a)? = state.document?.content,a===pages else{return};if let m{state.page=m;state.send("page",number:Double(m));state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}
+        }
+    }
+
     var background:Color{state.theme=="dark" ? Color(nsColor:NSColor(white:0.06,alpha:1)):state.theme=="light" ? .white:Color(nsColor:.windowBackgroundColor)}
-    func page(_ image:CGImage,_ size:CGSize,_ scale:CGFloat,_ columns:Int)->some View{let iw=CGFloat(image.width)/scale,ih=CGFloat(image.height)/scale,slot=size.width/CGFloat(columns);return Image(decorative:image,scale:scale).resizable().aspectRatio(contentMode:.fit).rotationEffect(.degrees(Double(state.rotation))).frame(width:state.fit=="actual" ? iw*CGFloat(state.zoom):state.fit=="width" ? slot*CGFloat(state.zoom):nil,height:state.fit=="page" ? size.height*CGFloat(state.zoom):state.fit=="actual" ? ih*CGFloat(state.zoom):nil).frame(maxWidth:state.fit=="page" ? slot*CGFloat(state.zoom):nil)}
+    func page(_ image:CGImage,_ size:CGSize,_ scale:CGFloat,_ columns:Int)->some View{
+        let rotated=state.rotation%180 != 0,iw=CGFloat(rotated ? image.height:image.width)/scale,ih=CGFloat(rotated ? image.width:image.height)/scale,slot=size.width/CGFloat(columns)
+        return Image(decorative:image,scale:scale).resizable().aspectRatio(contentMode:.fit).rotationEffect(.degrees(Double(state.rotation)))
+            .frame(width:state.fit=="actual" ? iw*CGFloat(state.zoom):state.fit=="width" ? slot*CGFloat(state.zoom):nil,
+                   height:state.fit=="page" ? size.height*CGFloat(state.zoom):state.fit=="actual" ? ih*CGFloat(state.zoom):nil)
+            .frame(maxWidth:state.fit=="page" ? slot*CGFloat(state.zoom):nil)
+    }
 }
 private struct WindowScale:NSViewRepresentable{ @Binding var scale:CGFloat;func makeNSView(context:Context)->NSView{let v=NSView();DispatchQueue.main.async{scale=v.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2};return v};func updateNSView(_ v:NSView,context:Context){DispatchQueue.main.async{let x=v.window?.backingScaleFactor ?? 2;if scale != x{scale=x}}}}
 private struct PageOffsetKey:PreferenceKey{static var defaultValue:[Int:CGFloat]=[:];static func reduce(value:inout[Int:CGFloat],nextValue:()->[Int:CGFloat]){value.merge(nextValue(),uniquingKeysWith:{_,b in b})}}
 @MainActor private struct LazyPage:View{
     @ObservedObject var state:ReaderState;let pages:Pages,index:Int,width:Int,scale:CGFloat;@State private var image:CGImage?
-    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation)))}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).background(GeometryReader{g in Color.clear.preference(key:PageOffsetKey.self,value:[index:g.frame(in:.named("pages")).midY])}).task(id:"\(width):\(state.rotation)"){image=try? await pages.image(index,width:width)}.onDisappear{image=nil}}
+    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation))).scaleEffect(state.fit=="custom" ? state.zoom:1)}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).background(GeometryReader{g in Color.clear.preference(key:PageOffsetKey.self,value:[index:g.frame(in:.named("pages")).midY])}).task(id:"\(width):\(state.rotation):\(state.zoom)"){do{image=try await pages.image(index,width:width)}catch{if !Task.isCancelled{state.error=error.localizedDescription}}}.onDisappear{image=nil}}
 }
 #endif

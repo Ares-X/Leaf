@@ -34,10 +34,10 @@ API unsigned char *lf_render(Document *d, int index, int width, int *info, char 
     while (!ddjvu_page_decoding_done(page)) if (!messages(d, error)) { ddjvu_page_release(page); return NULL; }
     int w = ddjvu_page_get_width(page), h = ddjvu_page_get_height(page);
     if (w <= 0 || h <= 0 || ddjvu_page_decoding_error(page)) { ddjvu_page_release(page); return NULL; }
-    if(width<=0 || width>INT_MAX/3){ddjvu_page_release(page);snprintf(error,512,"Invalid render width");return NULL;}
+    if(width<=0 || width>16384 || width>INT_MAX/3){ddjvu_page_release(page);snprintf(error,512,"Invalid render width");return NULL;}
     double scaled=(double)h*(double)width/(double)w;if(!(scaled>0)||scaled>INT_MAX){ddjvu_page_release(page);snprintf(error,512,"Invalid page size");return NULL;}
     info[0]=width;info[1]=(int)scaled;info[2]=width*3;info[3]=3;
-    if((size_t)info[1]>SIZE_MAX/(size_t)info[2]){ddjvu_page_release(page);snprintf(error,512,"Page bitmap too large");return NULL;}
+    if((size_t)info[1]>SIZE_MAX/(size_t)info[2] || (size_t)info[1]*(size_t)info[2]>512u*1024u*1024u){ddjvu_page_release(page);snprintf(error,512,"Page bitmap too large");return NULL;}
     unsigned char *out=malloc((size_t)info[2]*(size_t)info[1]);
     ddjvu_format_t *format = ddjvu_format_create(DDJVU_FORMAT_RGB24, 0, NULL);
     if (!out || !format) { free(out); if (format) ddjvu_format_release(format); ddjvu_page_release(page); return NULL; }
@@ -48,3 +48,4 @@ API unsigned char *lf_render(Document *d, int index, int width, int *info, char 
     if (!ok) { free(out); snprintf(error, 512, "Cannot render DjVu page"); return NULL; }
     return out;
 }
+

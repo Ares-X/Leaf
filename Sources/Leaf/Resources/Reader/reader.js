@@ -92,11 +92,12 @@ window.leafCommand = async command => {
         case 'href': await view.goTo(command.text); break
         case 'fraction': await view.goToFraction(command.number); break
         case 'zoom': {
-            const [family='system',,line='1.6',margin='32',theme='system'] = String(window.leafStyle || '').split('|')
-            style(`${family}|${17 * command.number}|${line}|${margin}|${theme}`); break
+            const [family='system',size='17',line='1.6',margin='32',theme='system'] = String(window.leafStyle || '').split('|')
+            style(`${family}|${Number(size) * command.number}|${line}|${margin}|${theme}`); break
         }
         case 'style': window.leafStyle = command.text; style(command.text); break
         case 'spread': view.renderer.setAttribute('max-column-count', String(command.number)); break
+        case 'rtl': view.book.dir = command.number ? 'rtl' : 'ltr'; view.renderer.setAttribute('dir', view.book.dir); break
         case 'flow': view.renderer.setAttribute('flow', command.text === 'continuous' ? 'scrolled' : 'paginated'); break
         case 'fit': break
         case 'find': {
@@ -161,5 +162,6 @@ try {
     style(window.leafStyle)
     post('toc', { items: flatten(book.toc) })
     await view.init({ lastLocation: window.leafLocation || undefined })
+    post('ready')
 } catch (error) { post('error', { message: error.message }) }
 window.addEventListener('pagehide', () => { ++searchID; view.close() })
