@@ -97,40 +97,59 @@ struct ReadingPosition:Codable{var page=0}
     func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};go(String(p.page+1))}
 }
 
-@main @MainActor struct LeafApp:App{
+private struct ReaderStateKey:FocusedValueKey{typealias Value=ReaderState}
+private extension FocusedValues{
+    var readerState:ReaderState?{get{self[ReaderStateKey.self]}set{self[ReaderStateKey.self]=newValue}}
+}
+
+@MainActor private struct ReaderWindow:View{
     @StateObject private var state=ReaderState()
-    var body:some Scene{
-        Window("Leaf",id:"reader"){
-            ReaderView(state:state).frame(minWidth:560,minHeight:400)
-                .onOpenURL{state.open($0)}
-                .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in state.persist()}
-        }.defaultSize(width:900,height:740)
-        .commands{
-            CommandGroup(replacing:.newItem){
-                Button("Open…",action:state.chooseFile).keyboardShortcut("o")
-                Menu("Open Recent"){ForEach(NSDocumentController.shared.recentDocumentURLs.filter{FileManager.default.fileExists(atPath:$0.path)},id:\.self){u in Button(u.lastPathComponent){state.open(u)}};Divider();Button("Clear Menu"){NSDocumentController.shared.clearRecentDocuments(nil)}}
-            }
-            CommandGroup(after:.saveItem){
-                Button("Save a Copy…",action:state.saveCopy).keyboardShortcut("s",modifiers:[.command,.shift]).disabled(state.document==nil)
-                Button("Reload",action:state.reload).keyboardShortcut("r").disabled(state.document==nil)
-                Button("Show in Finder"){if let u=state.document?.url{NSWorkspace.shared.activateFileViewerSelecting([u])}}.disabled(state.document==nil)
-                Button("Copy File Path",action:state.copyPath).disabled(state.document==nil)
-                Button("Close Document",action:state.close).keyboardShortcut("w").disabled(state.document==nil)
-            }
-            CommandGroup(after:.printItem){Button("Print…",action:state.printDocument).keyboardShortcut("p").disabled(state.document==nil)}
-            CommandGroup(after:.toolbar){Button("Toggle Contents"){state.showContents.toggle()}.keyboardShortcut("t",modifiers:[.command,.shift]);Button("Enter Full Screen"){NSApp.keyWindow?.toggleFullScreen(nil)}.keyboardShortcut("f",modifiers:[.command,.control])}
-            CommandMenu("Reading"){
-                Button("Find…"){state.showFind.toggle()}.keyboardShortcut("f")
-                Button("Previous Page"){state.turn(-1)}.keyboardShortcut("[");Button("Next Page"){state.turn(1)}.keyboardShortcut("]")
-                Button("Previous File"){state.sibling(-1)}.keyboardShortcut(.upArrow,modifiers:[.command,.option]);Button("Next File"){state.sibling(1)}.keyboardShortcut(.downArrow,modifiers:[.command,.option])
-                Divider();Button("Zoom In"){state.setZoom(state.zoom*1.2)}.keyboardShortcut("+");Button("Zoom Out"){state.setZoom(state.zoom/1.2)}.keyboardShortcut("-");Button("Actual Size"){state.setFit("actual")}.keyboardShortcut("1").disabled(!state.supportsFit);Button("Fit Page"){state.setFit("page")}.keyboardShortcut("0").disabled(!state.supportsFit);Button("Fit Width"){state.setFit("width")}.keyboardShortcut("2").disabled(!state.supportsFit)
-                Divider();Button("Paged"){state.setFlow("paged")}.disabled(!state.supportsFlow);Button("Continuous"){state.setFlow("continuous")}.disabled(!state.supportsFlow);Toggle("Two Pages",isOn:$state.spread).disabled(!state.supportsSpread);Toggle("Right to Left",isOn:$state.rtl).disabled(!state.supportsRTL)
-                Divider();Button("Bookmark This Position",action:state.bookmark).keyboardShortcut("d");Button("Go to Bookmark",action:state.restoreBookmark);Button("Contents"){state.showContents.toggle()}
-                Divider();Button("Rotate Left"){state.rotate(-90)}.disabled(!state.supportsRotation);Button("Rotate Right"){state.rotate(90)}.disabled(!state.supportsRotation)
-                Divider();Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}
-            }
+    var body:some View{
+        ReaderView(state:state).frame(minWidth:560,minHeight:400)
+            .background(WindowTabs())
+            .focusedSceneValue(\.readerState,state)
+            .onOpenURL{state.open($0)}
+            .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in state.persist()}
+    }
+}
+private struct WindowTabs:NSViewRepresentable{
+    func makeNSView(context:Context)->NSView{let v=NSView();DispatchQueue.main.async{if let w=v.window{NSWindow.allowsAutomaticWindowTabbing=true;w.tabbingIdentifier="LeafReader";w.tabbingMode = .preferred}};return v}
+    func updateNSView(_ v:NSView,context:Context){if let w=v.window{w.tabbingIdentifier="LeafReader";w.tabbingMode = .preferred}}
+}
+
+private struct LeafCommands:Commands{
+    @FocusedValue(\.readerState) private var state
+    var body:some Commands{
+        CommandGroup(after:.newItem){
+            Button("Open…"){state?.chooseFile()}.keyboardShortcut("o").disabled(state==nil)
+            Menu("Open Recent"){ForEach(NSDocumentController.shared.recentDocumentURLs.filter{FileManager.default.fileExists(atPath:$0.path)},id:\.self){u in Button(u.lastPathComponent){state?.open(u)}};Divider();Button("Clear Menu"){NSDocumentController.shared.clearRecentDocuments(nil)}}
         }
-        Settings{SettingsView(state:state)}
+        CommandGroup(after:.saveItem){
+            Button("Save a Copy…"){state?.saveCopy()}.keyboardShortcut("s",modifiers:[.command,.shift]).disabled(state?.document==nil)
+            Button("Reload"){state?.reload()}.keyboardShortcut("r").disabled(state?.document==nil)
+            Button("Show in Finder"){if let u=state?.document?.url{NSWorkspace.shared.activateFileViewerSelecting([u])}}.disabled(state?.document==nil)
+            Button("Copy File Path"){state?.copyPath()}.disabled(state?.document==nil)
+            Button("Close Document"){state?.close()}.disabled(state?.document==nil)
+        }
+        CommandGroup(after:.printItem){Button("Print…"){state?.printDocument()}.keyboardShortcut("p").disabled(state?.document==nil)}
+        CommandGroup(after:.toolbar){Button("Toggle Contents"){state?.showContents.toggle()}.keyboardShortcut("t",modifiers:[.command,.shift]);Button("Enter Full Screen"){NSApp.keyWindow?.toggleFullScreen(nil)}.keyboardShortcut("f",modifiers:[.command,.control])}
+        CommandMenu("Reading"){
+            Button("Find…"){state?.showFind.toggle()}.keyboardShortcut("f").disabled(state==nil)
+            Button("Previous Page"){state?.turn(-1)}.keyboardShortcut("[");Button("Next Page"){state?.turn(1)}.keyboardShortcut("]")
+            Button("Previous File"){state?.sibling(-1)}.keyboardShortcut(.upArrow,modifiers:[.command,.option]);Button("Next File"){state?.sibling(1)}.keyboardShortcut(.downArrow,modifiers:[.command,.option])
+            Divider();Button("Zoom In"){if let state{state.setZoom(state.zoom*1.2)}}.keyboardShortcut("+");Button("Zoom Out"){if let state{state.setZoom(state.zoom/1.2)}}.keyboardShortcut("-");Button("Actual Size"){state?.setFit("actual")}.keyboardShortcut("1").disabled(state?.supportsFit != true);Button("Fit Page"){state?.setFit("page")}.keyboardShortcut("0").disabled(state?.supportsFit != true);Button("Fit Width"){state?.setFit("width")}.keyboardShortcut("2").disabled(state?.supportsFit != true)
+            Divider();Button("Paged"){state?.setFlow("paged")}.disabled(state?.supportsFlow != true);Button("Continuous"){state?.setFlow("continuous")}.disabled(state?.supportsFlow != true)
+            Divider();Button("Bookmark This Position"){state?.bookmark()}.keyboardShortcut("d");Button("Go to Bookmark"){state?.restoreBookmark()};Button("Contents"){state?.showContents.toggle()}
+            Divider();Button("Rotate Left"){state?.rotate(-90)}.disabled(state?.supportsRotation != true);Button("Rotate Right"){state?.rotate(90)}.disabled(state?.supportsRotation != true)
+            Divider();Button("Light"){state?.setTheme("light")};Button("Dark"){state?.setTheme("dark")};Button("System Theme"){state?.setTheme("system")}
+        }
+    }
+}
+
+@main @MainActor struct LeafApp:App{
+    var body:some Scene{
+        WindowGroup("Leaf"){ReaderWindow()}.defaultSize(width:900,height:740).commands{LeafCommands()}
+        Settings{SettingsView()}
     }
 }
 
