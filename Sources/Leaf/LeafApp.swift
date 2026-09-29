@@ -45,9 +45,10 @@ struct ReadingPosition:Codable{var page=0}
     }
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
+    var isCHM:Bool{if case .chm=document?.content{return true};return false}
     var supportsFlow:Bool{document != nil && !isText}
     var supportsSpread:Bool{supportsFlow}
-    var supportsRTL:Bool{document != nil && !isText}
+    var supportsRTL:Bool{isFixed || isCHM}
     var supportsFit:Bool{isFixed}
     var supportsRotation:Bool{isFixed}
     var positionLabel:String{"\(min(page+1,count)) / \(count)"}
@@ -64,7 +65,7 @@ struct ReadingPosition:Codable{var page=0}
     func close(){generation+=1;restoreTask?.cancel();persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];searchResults=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
     func reload(){guard let u=document?.url else{return};persist();generation+=1;let g=generation;loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==generation{status="Reload failed";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
-    func turn(_ d:Int){if case .chm=document?.content{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
+    func turn(_ d:Int){if isCHM{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
     func go(_ s:String){guard let n=Double(s),n.isFinite else{return};page=Int(max(0,min(Double(max(0,count-1)),n-1)));send("page",number:Double(page));persist()}
     func sibling(_ delta:Int){guard let u=document?.url,let files=try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])else{return};let list=files.filter{Format.detect($0.lastPathComponent) != .unknown}.sorted{$0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)== .orderedAscending};guard let i=list.firstIndex(of:u),list.indices.contains(i+delta)else{return};open(list[i+delta])}
     func saveCopy(){
