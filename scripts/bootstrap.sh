@@ -10,15 +10,13 @@ checkout() {
     if ! git -C "$directory" cat-file -e "$revision^{commit}" 2>/dev/null; then git -C "$directory" fetch --depth 1 origin "$revision"; fi
     git -C "$directory" checkout -q --detach "$revision"
 }
-mkdir -p build/deps Sources/Leaf/Resources/Reader/foliate/vendor
+mkdir -p build/deps Sources/Leaf/Resources/Reader/foliate
 checkout https://github.com/johnfactotum/foliate-js.git "$FOLIATE" "$ROOT/build/deps/foliate"
 DEST=Sources/Leaf/Resources/Reader
-# Only the rendering library. Exclude demo UI, PDF.js and zip.js (native adapters supply those).
-for file in build/deps/foliate/*.js; do
-    case "$(basename "$file")" in reader.js|pdf.js|rollup*|eslint*) continue;; esac
-    cp "$file" "$DEST/foliate/"
+# CHM needs Foliate's view/renderer only; ebook parsers are handled by MuPDF.
+for file in view.js paginator.js fixed-layout.js utils.js; do
+    cp "build/deps/foliate/$file" "$DEST/foliate/$file"
 done
-cp build/deps/foliate/vendor/fflate.js "$DEST/foliate/vendor/"
 cp build/deps/foliate/LICENSE "$DEST/foliate/LICENSE"
 printf 'foliate=%s\n' "$FOLIATE" > "$DEST/versions.txt"
 echo "Reader dependencies prepared. Subsequent builds reuse their local copies."
