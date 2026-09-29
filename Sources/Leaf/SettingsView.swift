@@ -5,9 +5,9 @@ struct SettingsView:View{
     @ObservedObject var state:ReaderState
     var body:some View{Form{
         Picker("Theme",selection:$state.theme){Text("System").tag("system");Text("Light").tag("light");Text("Dark").tag("dark")}.onChange(of:state.theme){state.setTheme($0)}
-        Picker("Default layout",selection:$state.flow){Text("Paged").tag("paged");Text("Continuous").tag("continuous")}.onChange(of:state.flow){UserDefaults.standard.set($0,forKey:"flow");if state.supportsFlow{state.send("flow",text:$0)}}
-        Picker("Default fit",selection:$state.fit){Text("Fit Page").tag("page");Text("Fit Width").tag("width");Text("Actual Size").tag("actual")}.onChange(of:state.fit){UserDefaults.standard.set($0,forKey:"fit");if state.supportsFit{state.zoom=1;state.send("fit",text:$0)}}
-        Toggle("Two pages",isOn:$state.spread).onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread");if state.supportsSpread{state.send("spread",number:$0 ? 2:1)}};Toggle("Right to left",isOn:$state.rtl).onChange(of:state.rtl){UserDefaults.standard.set($0,forKey:"rtl");if state.supportsRTL{state.send("rtl",number:$0 ? 1:0)}}
+        Picker("Default layout",selection:$state.flow){Text("Paged").tag("paged");Text("Continuous").tag("continuous")}.onChange(of:state.flow){UserDefaults.standard.set($0,forKey:"flow")}
+        Picker("Default fit",selection:$state.fit){Text("Fit Page").tag("page");Text("Fit Width").tag("width");Text("Actual Size").tag("actual")}.onChange(of:state.fit){UserDefaults.standard.set($0,forKey:"fit")}
+        Toggle("Two pages",isOn:$state.spread).onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread")};Toggle("Right to left",isOn:$state.rtl).onChange(of:state.rtl){UserDefaults.standard.set($0,forKey:"rtl")}
         Divider()
         Picker("Font",selection:$state.font){Text("System").tag("system");Text("Serif").tag("serif");Text("Sans Serif").tag("sans-serif");Text("Monospace").tag("monospace")}.onChange(of:state.font){_ in state.applyTypography()}
         HStack{Text("Font size");Slider(value:$state.fontSize,in:10...36,step:1).onChange(of:state.fontSize){_ in state.applyTypography()};Text("\(Int(state.fontSize)) pt").monospacedDigit().frame(width:45)}
