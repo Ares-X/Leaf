@@ -96,6 +96,7 @@ view.addEventListener('load', ({ detail: { doc } }) => doc.addEventListener('key
 }))
 try {
     const meta = await (await fetchOK(`${base}/meta`)).json()
+    if (meta.format !== 'chm') throw Error('WebKit reader only supports CHM')
     const book = await htmlBook(meta)
     await view.open(book)
     view.renderer.setAttribute('max-column-count', String(window.leafSpread ?? 1))
