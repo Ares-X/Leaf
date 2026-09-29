@@ -19,7 +19,7 @@ struct ReadingDocument{
         try Task.checkCancellation()
         if (try? url.resourceValues(forKeys:[.isDirectoryKey]).isDirectory)==true{let f=URL(fileURLWithPath:url.path,isDirectory:true);return .init(url:f,content:.pages(try Pages(f,format:.comic)))}
         let fh=try FileHandle(forReadingFrom:url),prefix=try fh.read(upToCount:2048) ?? Data();try fh.close()
-        let format=Format.resolve(url.lastPathComponent,prefix:prefix)
+        let format=try Format.resolve(url,prefix:prefix)
 
         switch format{
         case .pdf:guard PDFDocument(url:url) != nil else{throw ReadError("Cannot read PDF: \(url.lastPathComponent)")};return .init(url:url,content:.pdf(url,nil))

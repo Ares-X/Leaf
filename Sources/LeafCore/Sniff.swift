@@ -6,6 +6,16 @@ public extension Format{
         if let sniffed=sniff(prefix),declared != .replica,declared != .lit{return sniffed}
         return declared
     }
+    static func resolve(_ url:URL,prefix:Data)throws->Format{
+        let basic=resolve(url.lastPathComponent,prefix:prefix)
+        guard basic == .comic,prefix.starts(with:[0x50,0x4b,0x03,0x04]) else{return basic}
+        let archive=try Archive(url)
+        if archive.contains("META-INF/container.xml") || ((try? archive.data("mimetype")).flatMap{String(data:$0,encoding:.utf8)?.trimmingCharacters(in:.whitespacesAndNewlines)}).map({$0=="application/epub+zip" || $0=="application/x-ibooks+zip"}) == true{return .book}
+        if archive.contains("_rels/.rels") || archive.contains("_rels/.rels/[0].piece") || archive.contains("_rels/.rels/[0].last.piece"){return .mupdf}
+        let files=archive.entries.map{$0.name.lowercased()}
+        if files.filter({$0.hasSuffix(".fb2")}).count == 1 && files.allSatisfy({$0.hasSuffix(".fb2") || $0.hasSuffix(".url")}){return .book}
+        return basic
+    }
 
     /// Small signature set mirrored from Sumatra's BSD GuessFileType.cpp.
     /// Extension routing still wins for ambiguous containers (ZIP/7z/RAR).

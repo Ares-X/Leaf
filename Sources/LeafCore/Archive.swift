@@ -29,6 +29,7 @@ public struct Archive: Sendable {
         guard !normalized.hasPrefix("/"),!normalized.split(separator:"/").contains("..") else{return false}
         return true
     }
+    public func contains(_ name:String)->Bool{entries.contains{$0.name.caseInsensitiveCompare(name) == .orderedSame}}
     public var images: [String] {
         entries.map(\.name).filter {
             Self.isSafeEntryName($0) &&
