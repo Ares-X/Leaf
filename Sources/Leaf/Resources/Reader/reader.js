@@ -65,9 +65,6 @@ window.leafCommand = async command => {
             style(`${family}|${Number(size) * command.number}|${line}|${margin}|${theme}`); break
         }
         case 'style': window.leafStyle = command.text; style(command.text); break
-        case 'spread': view.renderer.setAttribute('max-column-count', String(command.number)); break
-        case 'rtl': view.book.dir = command.number ? 'rtl' : 'ltr'; view.renderer.setAttribute('dir', view.book.dir); break
-        case 'flow': view.renderer.setAttribute('flow', command.text === 'continuous' ? 'scrolled' : 'paginated'); break
          case 'find': {
             if (!command.text) break
             if (query === command.text && hits.length) { selected = (selected + 1) % hits.length; await view.select(hits[selected].cfi); break }
@@ -97,8 +94,6 @@ try {
     if (meta.format !== 'chm') throw Error('WebKit reader only supports CHM')
     const book = await htmlBook(meta)
     await view.open(book)
-    view.renderer.setAttribute('max-column-count', String(window.leafSpread ?? 1))
-    view.renderer.setAttribute('flow', window.leafFlow ?? 'paginated')
     style(window.leafStyle)
     post('toc', { items: flatten(book.toc) })
     await view.init()
