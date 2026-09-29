@@ -81,7 +81,8 @@ let searchID = 0, query = '', hits = [], selected = -1
 const style = value => {
     const [family='system', size='17', line='1.6', margin='32', theme='system'] = String(value || '').split('|')
     const font = family === 'system' ? '-apple-system,BlinkMacSystemFont,sans-serif' : family
-    const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme:dark)').matches)\n    view.renderer?.setStyles?.(`:root{color-scheme:${dark?'dark':'light'}}body{font-family:${font}!important;font-size:${size}px!important;line-height:${line}!important;padding-inline:${margin}px!important;background:${dark?'#111':'#fff'}!important;color:${dark?'#ddd':'#111'}!important}a{color:${dark?'#8ab4f8':'#06c'}!important}img,svg{max-width:100%;height:auto}`)
+    const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme:dark)').matches)
+    view.renderer?.setStyles?.(`:root{color-scheme:${dark?'dark':'light'}}body{font-family:${font}!important;font-size:${size}px!important;line-height:${line}!important;padding-inline:${margin}px!important;background:${dark?'#111':'#fff'}!important;color:${dark?'#ddd':'#111'}!important}a{color:${dark?'#8ab4f8':'#06c'}!important}img,svg{max-width:100%;height:auto}`)
 }
 window.leafCommand = async command => {
     try {
