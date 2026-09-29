@@ -11,7 +11,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
 @MainActor final class ReaderState:ObservableObject{
     @Published var document:ReadingDocument?,busy=false,error:String?,status="",page=0,count=0,zoom=1.0,fraction=0.0,outline:[ContentsItem]=[],command=ReaderCommand(),showContents=false,showFind=false,spread=false,rtl=false
     @Published var fit="page",flow="paged",font="system",fontSize=17.0,lineHeight=1.6,margin=32.0,theme="system",rotation=0,recents:[URL]=[]
-    var cfi:String?;private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?,watchedFD:Int32 = -1
+    var cfi:String?;private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,restoreTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?,watchedFD:Int32 = -1
 
     init(){
         let d=UserDefaults.standard
@@ -21,7 +21,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
         if d.object(forKey:"lineHeight") != nil{lineHeight=d.double(forKey:"lineHeight")}
         if d.object(forKey:"margin") != nil{margin=d.double(forKey:"margin")}
         spread=d.bool(forKey:"spread");rtl=d.bool(forKey:"rtl");recents=recents.filter{FileManager.default.fileExists(atPath:$0.path)}
-        if let p=d.string(forKey:"lastDocument"),FileManager.default.fileExists(atPath:p){Task{open(URL(fileURLWithPath:p))}}
+        if let p=d.string(forKey:"lastDocument"),FileManager.default.fileExists(atPath:p){restoreTask=Task{try? await Task.sleep(nanoseconds:300_000_000);guard !Task.isCancelled,document==nil,!busy else{return};open(URL(fileURLWithPath:p))}}
     }
     var isBook:Bool{if case .book=document?.content{return true};return false}
     var isText:Bool{if case .text=document?.content{return true};return false}
@@ -37,7 +37,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
             }catch{if !Task.isCancelled{self.error=error.localizedDescription;busy=false}}}
     }
     func close(){persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
-    func reload(){if let u=document?.url{open(u)}}
+    func reload(){guard let u=document?.url else{return};persist();loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await worker.value;guard !Task.isCancelled else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled{status="Reload failed";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page,cfi:cfi,fraction:fraction))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if isBook{send(d>0 ? "next":"prev")}else{page=max(0,min(max(0,count-1),page+d*(spread ? 2:1)));send("page",number:Double(page));persist()}}
     func go(_ s:String){guard let n=Double(s),n.isFinite else{return};if isBook{send("fraction",number:max(0,min(1,n/100)))}else{page=Int(max(0,min(Double(max(0,count-1)),n-1)));send("page",number:Double(page));persist()}}

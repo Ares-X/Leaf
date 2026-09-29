@@ -79,8 +79,7 @@ info = dict(CFBundleName='Leaf', CFBundleDisplayName='Leaf', CFBundleExecutable=
             CFBundleShortVersionString='0.2.0', CFBundleVersion='2',
             LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True,
             CFBundleDocumentTypes=[dict(CFBundleTypeName='Readable documents', CFBundleTypeRole='Viewer',
-                 LSHandlerRank='Alternate', CFBundleTypeExtensions=sorted(set(' '.join(suffixes).split())),
-                 LSItemContentTypes=['public.data','public.content'])],
+                 LSHandlerRank='Alternate', CFBundleTypeExtensions=sorted(set(' '.join(suffixes).split())))],
             LSSupportsOpeningDocumentsInPlace=True)
 with (contents / 'Info.plist').open('wb') as f: plistlib.dump(info, f)
 for target in copied.values(): subprocess.check_call(['codesign', '--force', '--sign', '-', str(target)])
