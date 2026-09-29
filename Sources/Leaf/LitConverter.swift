@@ -12,7 +12,11 @@ enum LitConverter{
         guard p.terminationStatus==0 else{let data=(try? Data(contentsOf:log)) ?? Data();throw ReadError(String(data:data,encoding:.utf8) ?? "LIT conversion failed")}
         let files=(FileManager.default.enumerator(at:dir,includingPropertiesForKeys:nil)?.allObjects as? [URL]) ?? []
         guard let opf=files.first(where:{$0.pathExtension.lowercased()=="opf"})else{throw ReadError("LIT contains no OEB package")}
-        return(temp,opf)
+        let meta=dir.appendingPathComponent("META-INF",isDirectory:true);try FileManager.default.createDirectory(at:meta,withIntermediateDirectories:true)
+        let relative=String(opf.path.dropFirst(dir.path.count+1)).replacingOccurrences(of:"&",with:"&amp;").replacingOccurrences(of:""",with:"&quot;")
+        let container="<?xml version=\"1.0\" encoding=\"UTF-8\"?><container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"\(relative)\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>"
+        try Data(container.utf8).write(to:meta.appendingPathComponent("container.xml"),options:.atomic)
+        return(temp,dir)
     }
 }
 #endif
