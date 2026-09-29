@@ -92,13 +92,17 @@ if tool.exists():
 groups = re.findall(r'\(\.(\w+),\s*"([^"]+)"\)', (root / 'Sources/LeafCore/Format.swift').read_text())
 suffixes=[s for kind,s in groups if not core or kind not in ('mupdf','djvu','chm','lit','postscript')]
 if core:suffixes=[' '.join(x for x in s.split() if x!='jxl') for s in suffixes]
+icon = contents / 'Resources' / 'Leaf.icns'
+if icon.exists(): icon_name='Leaf.icns'
+else: icon_name=None
 info = dict(CFBundleName='Leaf', CFBundleDisplayName='Leaf', CFBundleExecutable='Leaf',
             CFBundleIdentifier='dev.aresx.leaf', CFBundlePackageType='APPL',
             CFBundleShortVersionString='0.2.0', CFBundleVersion='2',
             LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True,
             CFBundleDocumentTypes=[dict(CFBundleTypeName='Readable documents', CFBundleTypeRole='Viewer',
                  LSHandlerRank='Alternate', CFBundleTypeExtensions=sorted(set(' '.join(suffixes).split())))],
-            LSSupportsOpeningDocumentsInPlace=True)
+            LSSupportsOpeningDocumentsInPlace=True,
+            **({'CFBundleIconFile':icon_name} if icon_name else {}))
 with (contents / 'Info.plist').open('wb') as f: plistlib.dump(info, f)
 for target in copied.values(): subprocess.check_call(['codesign', '--force', '--sign', '-', str(target)])
 print(f'{len(copied)} decoder dylibs bundled; system frameworks are not copied.')
