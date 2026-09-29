@@ -18,7 +18,7 @@ struct SettingsView:View{
         }
         Section("Reading"){
             Picker("Default layout",selection:$flow){Text("Paged").tag("paged");Text("Continuous").tag("continuous")}
-            Toggle("Two pages",isOn:$spread);Toggle("Right to left",isOn:$rtl)
+            Toggle("Open in two-page mode",isOn:$spread);Toggle("Right-to-left by default",isOn:$rtl)
         }
         Section("Typography"){
             Picker("Font",selection:$font){Text("System").tag("system");Text("Serif").tag("serif");Text("Sans Serif").tag("sans-serif");Text("Monospace").tag("monospace")}
