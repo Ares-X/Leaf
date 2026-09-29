@@ -69,7 +69,6 @@ struct ReadingPosition:Codable{var page=0}
     var canTurn:Bool{isCHM ? hasDocument:count>1}
     var canSaveCopy:Bool{document?.url.hasDirectoryPath == false}
     var printsCurrentPageOnly:Bool{if case .pages=document?.content{return count>1};return false}
-    var printsCurrentPageOnly:Bool{if case .pages=document?.content{return true};return false}
     var printTitle:String{printsCurrentPageOnly ? "Print Current Page…":"Print…"}
     var hasBookmark:Bool{guard let u=document?.url else{return false};return UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path) != nil}
     var positionLabel:String{count>0 ? "\(min(page+1,count)) / \(count)":"— / —"}
@@ -99,7 +98,7 @@ struct ReadingPosition:Codable{var page=0}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if isCHM{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
     func go(_ s:String){guard let n=Double(s),n.isFinite else{return};page=Int(max(0,min(Double(max(0,count-1)),n-1)));send("page",number:Double(page));persist()}
-    func sibling(_ delta:Int){guard let u=document?.url,let files=try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])else{return};let list=files.filter{Format.detect($0.lastPathComponent) != .unknown}.sorted{$0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)== .orderedAscending};guard let i=list.firstIndex(of:u),list.indices.contains(i+delta)else{return};open(list[i+delta])}
+    func sibling(_ delta:Int){guard let u=document?.url,let files=try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])else{return};let list=files.filter{Format.detect($0.lastPathComponent) != .unknown}.sorted{$0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending};guard let i=list.firstIndex(of:u),list.indices.contains(i+delta)else{return};open(list[i+delta])}
     func saveCopy(){
         guard let u=document?.url,!u.hasDirectoryPath else{error="Save a Copy is only available for files.";return}
         let p=NSSavePanel();p.nameFieldStringValue=u.lastPathComponent
