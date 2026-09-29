@@ -72,17 +72,14 @@ if not core:
 
 tool=contents/'Resources'/'Tools'/'clit'
 if tool.exists():
+    # ConvertLIT is copied as an executable; reuse bundle() for its non-system dylibs,
+    # then rewrite only the executable's references.
     ident=run('otool','-D',tool).splitlines()[1:]
-    rpaths=re.findall(r'cmd LC_RPATH\n.*?\n\s*path (.+?) \(offset',run('otool','-l',tool))
     for line in run('otool','-L',tool).splitlines()[1:]:
         dependency=line.strip().split(' (compatibility')[0]
         if dependency in ident or dependency.startswith(('/usr/lib/','/System/Library/')): continue
-        if dependency.startswith('@rpath/'):
-            candidates=[Path(x.replace('@loader_path',str(tool.parent)))/dependency[len('@rpath/'):] for x in rpaths]
-            resolved=next((x for x in candidates if x.exists()),None)
-        elif dependency.startswith('@loader_path/'): resolved=tool.parent/dependency[len('@loader_path/'):]
-        else: resolved=Path(dependency)
-        if resolved is None or not resolved.is_file(): raise RuntimeError(f'Cannot resolve helper dependency {dependency}')
+        resolved=Path(dependency)
+        if not resolved.is_file(): raise RuntimeError(f'Cannot resolve helper dependency {dependency}')
         child=bundle(resolved)
         subprocess.check_call(['install_name_tool','-change',dependency,'@loader_path/../../Frameworks/'+child.name,str(tool)])
     subprocess.check_call(['codesign','--force','--sign','-',str(tool)])
