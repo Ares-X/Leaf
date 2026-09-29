@@ -46,9 +46,9 @@ struct ReadingPosition:Codable{var page=0}
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
     var isCHM:Bool{if case .chm=document?.content{return true};return false}
-    var supportsFlow:Bool{document != nil && !isText}
-    var supportsSpread:Bool{supportsFlow}
-    var supportsRTL:Bool{isFixed || isCHM}
+    var supportsFlow:Bool{isFixed}
+    var supportsSpread:Bool{isFixed}
+    var supportsRTL:Bool{isFixed}
     var supportsFit:Bool{isFixed}
     var supportsRotation:Bool{isFixed}
     var positionLabel:String{"\(min(page+1,count)) / \(count)"}
