@@ -1,36 +1,45 @@
 #if os(macOS)
 import SwiftUI
 import WebKit
-import CryptoKit
 import UniformTypeIdentifiers
 import LeafCore
 
-actor BookSource{
-    let url:URL,format:Format;private let archive:Archive?,chm:NativeFile?,root:URL?;private let chmIndex:[String:Int],entries:[Archive.Entry];private let size:UInt64;private var rawFile:FileHandle?
-    init(_ url:URL,format:Format,root:URL?=nil)throws{self.url=url;self.format=format;self.root=root;if url.hasDirectoryPath{size=0;rawFile=nil}else{size=(try url.resourceValues(forKeys:[.fileSizeKey]).fileSize).map(UInt64.init) ?? 0;rawFile=try FileHandle(forReadingFrom:url)};let ext=url.pathExtension.lowercased()
-        if format == .book && ["epub","fb2z","fbz","zfb2","zip"].contains(ext){let a=try Archive(url);archive=a;entries=a.entries;chm=nil;chmIndex=[:]}
-        else if format == .chm{let c=try NativeFile(url,engine:"CHM");chm=c;archive=nil;var m:[String:Int]=[:],p:[Archive.Entry]=[];for i in 0..<c.count{let x=String(try c.path(i).drop(while:{$0=="/"}));m[x.lowercased()]=i;p.append(.init(name:x,size:0))};chmIndex=m;entries=p}else if let root{archive=nil;chm=nil;chmIndex=[:];let f=(FileManager.default.enumerator(at:root,includingPropertiesForKeys:[.fileSizeKey],options:[.skipsHiddenFiles])?.allObjects as? [URL]) ?? [];entries=f.filter{!$0.hasDirectoryPath}.map{let n=String($0.path.dropFirst(root.path.count+1)),z=(try? $0.resourceValues(forKeys:[.fileSizeKey]).fileSize) ?? 0;return Archive.Entry(name:n,size:Int64(z))}}
-        else{archive=nil;chm=nil;chmIndex=[:];entries=[]}}
-    deinit{try? rawFile?.close()}
-    func response(_ r:URL)throws->Data{try Task.checkCancellation();let q=URLComponents(url:r,resolvingAgainstBaseURL:false)?.queryItems ?? [];func p(_ n:String)->String?{q.first{$0.name==n}?.value}
-        if r.path=="/meta"{return try JSONSerialization.data(withJSONObject:["name":url.lastPathComponent,"size":size,"format":format.rawValue,"entries":entries.map{["filename":$0.name,"size":$0.size]}])}
-        if r.path=="/sha1"{return Data(Insecure.SHA1.hash(data:Data((p("text") ?? "").utf8)))}
-        if r.path=="/raw"{guard let file=rawFile else{throw ReadError("Raw slices are unavailable for directory books")};let a=min(size,UInt64(p("start") ?? "0") ?? 0),b=min(size,UInt64(p("end") ?? String(size)) ?? size);guard b>=a,b-a<=64*1024*1024 else{throw ReadError("Invalid or oversized book slice")};try file.seek(toOffset:a);return try file.read(upToCount:Int(b-a)) ?? Data()}
-        if r.path.hasPrefix("/entry/"){let n=String(r.path.dropFirst("/entry/".count));guard Archive.isSafeEntryName(n) else{throw ReadError("Invalid book path")};if let root{let base=root.standardizedFileURL.resolvingSymlinksInPath(),f=root.appendingPathComponent(n).standardizedFileURL.resolvingSymlinksInPath();guard f.path.hasPrefix(base.path+"/")else{throw ReadError("Invalid book path")};if n=="META-INF/container.xml",!FileManager.default.fileExists(atPath:f.path),let opf=entries.first(where:{$0.name.lowercased().hasSuffix(".opf")}){let path=opf.name.replacingOccurrences(of:"&",with:"&amp;").replacingOccurrences(of:"\"",with:"&quot;");return Data("<?xml version=\"1.0\" encoding=\"UTF-8\"?><container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"\(path)\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>".utf8)};let z=(try? f.resourceValues(forKeys:[.fileSizeKey]).fileSize) ?? 0;guard z<=512*1024*1024 else{throw ReadError("Book resource is too large")};return try Data(contentsOf:f)};if let archive{return try archive.data(n)};if let chm,let i=chmIndex[n.lowercased()]{let d=try chm.data(i);return["htm","html","hhc","hhk","css"].contains((n as NSString).pathExtension.lowercased()) ? Data(ReadingDocument.decode(d).utf8):d}}
-        throw ReadError("Book resource not found")}
+actor CHMSource{
+    let url:URL
+    private let chm:NativeFile
+    private let index:[String:Int]
+    let entries:[Archive.Entry]
+    init(_ url:URL)throws{
+        self.url=url
+        let chm=try NativeFile(url,engine:"CHM");self.chm=chm
+        var index:[String:Int]=[:],entries:[Archive.Entry]=[]
+        for i in 0..<chm.count{
+            let path=String(try chm.path(i).drop(while:{$0=="/"}))
+            index[path.lowercased()]=i;entries.append(.init(name:path,size:0))
+        }
+        self.index=index;self.entries=entries
+    }
+    func response(_ url:URL)throws->Data{
+        try Task.checkCancellation()
+        if url.path=="/meta"{return try JSONSerialization.data(withJSONObject:["name":self.url.lastPathComponent,"format":"chm","entries":entries.map{["filename":$0.name,"size":$0.size]}])}
+        guard url.path.hasPrefix("/entry/") else{throw ReadError("CHM resource not found")}
+        let name=String(url.path.dropFirst("/entry/".count));guard Archive.isSafeEntryName(name),let i=index[name.lowercased()] else{throw ReadError("CHM resource not found")}
+        let data=try chm.data(i)
+        return ["htm","html","hhc","hhk","css"].contains((name as NSString).pathExtension.lowercased()) ? Data(ReadingDocument.decode(data).utf8):data
+    }
 }
 
-@MainActor struct BookReader:NSViewRepresentable{
-    @ObservedObject var state:ReaderState;let source:BookSource
+@MainActor struct CHMReader:NSViewRepresentable{
+    @ObservedObject var state:ReaderState;let source:CHMSource
     func makeCoordinator()->Coordinator{Coordinator(state:state,source:source)}
     func makeNSView(context:Context)->WKWebView{let c=context.coordinator,x=WKWebViewConfiguration();x.websiteDataStore = .nonPersistent();x.setURLSchemeHandler(c,forURLScheme:"leaf");x.userContentController.add(c,name:"leaf")
-        let l=(try? JSONSerialization.data(withJSONObject:[state.cfi ?? ""])) ?? Data("[\"\"]".utf8),style="\(state.font)|\(state.fontSize)|\(state.lineHeight)|\(state.margin)|\(state.theme)"
-        let s="window.leafLocation=\(String(decoding:l,as:UTF8.self))[0];window.leafSpread=\(state.spread ? 2:1);window.leafFlow='\(state.flow=="continuous" ? "scrolled":"paginated")';window.leafStyle='\(style)';"
+        let style="\(state.font)|\(state.fontSize)|\(state.lineHeight)|\(state.margin)|\(state.theme)"
+        let s="window.leafSpread=\(state.spread ? 2:1);window.leafFlow='\(state.flow=="continuous" ? "scrolled":"paginated")';window.leafStyle='\(style)';"
         x.userContentController.addUserScript(WKUserScript(source:s,injectionTime:.atDocumentStart,forMainFrameOnly:true));let v=WKWebView(frame:.zero,configuration:x);v.navigationDelegate=c;v.load(URLRequest(url:URL(string:"leaf://reader/reader.html")!));return v}
     func updateNSView(_ v:WKWebView,context:Context){let c=context.coordinator;guard c.command != state.command.id else{return};c.command=state.command.id;if state.command.name=="print"{v.printView(nil);return};if c.ready{c.deliver(state.command,to:v)}else{c.pending=state.command}}
     static func dismantleNSView(_ v:WKWebView,coordinator:Coordinator){coordinator.requests.values.forEach{$0.cancel()};coordinator.requests.removeAll();v.configuration.userContentController.removeScriptMessageHandler(forName:"leaf");v.navigationDelegate=nil;v.stopLoading()}
     @MainActor final class Coordinator:NSObject,WKURLSchemeHandler,WKScriptMessageHandler,WKNavigationDelegate{
-        let state:ReaderState,source:BookSource;var command:UUID?,ready=false,pending:ReaderCommand?,requests:[ObjectIdentifier:Task<Void,Never>]=[:];init(state:ReaderState,source:BookSource){self.state=state;self.source=source}
+        let state:ReaderState,source:CHMSource;var command:UUID?,ready=false,pending:ReaderCommand?,requests:[ObjectIdentifier:Task<Void,Never>]=[:];init(state:ReaderState,source:CHMSource){self.state=state;self.source=source}
         func deliver(_ command:ReaderCommand,to v:WKWebView){let m:[String:Any]=["name":command.name,"text":command.text,"number":command.number];if let d=try? JSONSerialization.data(withJSONObject:m){v.evaluateJavaScript("window.leafCommand?.(\(String(decoding:d,as:UTF8.self)))")}}
         func webView(_ v:WKWebView,start t:WKURLSchemeTask){let id=ObjectIdentifier(t);requests[id]=Task{@MainActor in do{guard let u=t.request.url else{throw ReadError("Missing resource URL")};let d:Data;if u.host=="reader"{let p=Bundle.main.resourceURL?.appendingPathComponent("Reader"),root=(p.flatMap{FileManager.default.fileExists(atPath:$0.path) ? $0:nil} ?? Bundle.module.url(forResource:"Reader",withExtension:nil)!).standardizedFileURL.resolvingSymlinksInPath(),f=root.appendingPathComponent(String(u.path.dropFirst())).standardizedFileURL.resolvingSymlinksInPath();guard f.path.hasPrefix(root.path+"/") else{throw ReadError("Invalid reader resource path")};d=try await Task.detached{try Data(contentsOf:f)}.value}else if u.host=="book"{d=try await source.response(u)}else{throw ReadError("Unknown resource host")};guard !Task.isCancelled,requests[id] != nil else{return};let mime=["js":"text/javascript","hhc":"text/html","hhk":"text/html"][u.pathExtension.lowercased()] ?? UTType(filenameExtension:u.pathExtension)?.preferredMIMEType ?? "application/octet-stream";t.didReceive(HTTPURLResponse(url:u,statusCode:200,httpVersion:"HTTP/1.1",headerFields:["Content-Type":mime,"Content-Length":String(d.count)])!);t.didReceive(d);t.didFinish()}catch{if !Task.isCancelled,requests[id] != nil{t.didFailWithError(error)}};requests.removeValue(forKey:id)}}
         func webView(_ v:WKWebView,stop t:WKURLSchemeTask){let id=ObjectIdentifier(t);requests.removeValue(forKey:id)?.cancel()}
