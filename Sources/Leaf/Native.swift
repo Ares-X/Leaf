@@ -61,11 +61,12 @@ final class NativeFile {
         return image
     }
     var hasText:Bool{textFn != nil}
-    func relayout(fontSize:Double,lineHeight:Double,margin:Double,font:String)->Int?{
+    func relayout(fontSize:Double,lineHeight:Double,margin:Double,font:String,theme:String)->Int?{
         typealias Layout=@convention(c)(UnsafeMutableRawPointer,Float,UnsafePointer<CChar>)->Int32
         guard let relayoutFn else{return nil}
         let family=font=="serif" ? "serif":font=="monospace" ? "monospace":font=="sans-serif" ? "sans-serif":"system-ui"
-        let css="body{font-family:\(family);line-height:\(lineHeight);margin:\(margin)px}"
+        let colors=theme=="dark" ? "background:#111;color:#ddd" : theme=="light" ? "background:#fff;color:#111" : ""
+        let css="body{font-family:\(family);line-height:\(lineHeight);margin:\(margin)px;\(colors)} a{color:\(theme=="dark" ? "#8ab4f8":"#06c")}"
         return css.withCString{let n=unsafeBitCast(relayoutFn,to:Layout.self)(document,Float(fontSize),$0);return n>0 ? Int(n):nil}
     }
     func text(_ page: Int) -> String? {
