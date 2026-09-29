@@ -17,7 +17,6 @@ struct ReadingPosition:Codable{var page=0}
     @Published var count = 0
     @Published var zoom = 1.0
     @Published var outline: [ContentsItem] = []
-    @Published var searchResults: [ContentsItem] = []
     @Published var command = ReaderCommand()
     @Published var showContents = false
     @Published var showFind = false
@@ -55,14 +54,14 @@ struct ReadingPosition:Codable{var page=0}
     func send(_ name:String,text:String="",number:Double=0){command = .init(name:name,text:text,number:number)}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
-        restoreTask?.cancel();restoreTask=nil;generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];searchResults=[];page=0;count=0;zoom=1;rotation=0
+        restoreTask?.cancel();restoreTask=nil;generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;rotation=0
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
             do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return}
                 if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page)}
                 document=opened;busy=false;watchFile(url);UserDefaults.standard.set(url.path,forKey:"lastDocument");NSDocumentController.shared.noteNewRecentDocumentURL(url)
             }catch{if !Task.isCancelled{self.error=error.localizedDescription;busy=false}}}
     }
-    func close(){generation+=1;restoreTask?.cancel();persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];searchResults=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
+    func close(){generation+=1;restoreTask?.cancel();persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
     func reload(){guard let u=document?.url else{return};persist();generation+=1;let g=generation;loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==generation{status="Reload failed";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if isCHM{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
@@ -139,7 +138,7 @@ struct ReadingPosition:Codable{var page=0}
     @ObservedObject var state:ReaderState;@State private var query="";@State private var destination="";@FocusState private var finding:Bool
     var body:some View{VStack(spacing:0){
         if state.showFind{HStack{TextField("Find in document",text:$query).focused($finding).onSubmit{state.send("find",text:query)};Button("Find Next"){state.send("find",text:query)};Button{state.showFind=false}label:{Image(systemName:"xmark")}}.padding(8).onAppear{finding=true};Divider()}
-        HStack(spacing:0){if state.showContents{List(Array((state.showFind ? state.searchResults : state.outline).enumerated()),id:\.offset){_,i in Button{state.send("href",text:i.target)}label:{Text(i.title).lineLimit(2).padding(.leading,CGFloat(i.depth*10))}.buttonStyle(.plain)}.frame(width:210);Divider()}
+        HStack(spacing:0){if state.showContents{List(Array(state.outline.enumerated()),id:\.offset){_,i in Button{state.send("href",text:i.target)}label:{Text(i.title).lineLimit(2).padding(.leading,CGFloat(i.depth*10))}.buttonStyle(.plain)}.frame(width:210);Divider()}
             Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{Button("Open a document…",action:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)}
         if !state.status.isEmpty{Divider();Text(state.status).font(.caption).foregroundStyle(.secondary).padding(5)}
     }.navigationTitle(state.document?.url.lastPathComponent ?? "Leaf")
