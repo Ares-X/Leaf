@@ -16,6 +16,7 @@ actor Pages{
     func image(_ page:Int,width:Int)throws->CGImage{try Task.checkCancellation();guard(0..<count).contains(page)else{throw ReadError("Page out of range")};let width=max(128,min(16384,width)),key="\(page):\(width)";if let i=cache.firstIndex(where:{$0.0==key}){let h=cache.remove(at:i);cache.append(h);return h.1};let image:CGImage
         if let native{image=try native.image(page,width:width)}else{let data=try archive.map{try $0.data(names[page])} ?? (url.hasDirectoryPath ? Data(contentsOf:url.appendingPathComponent(names[page])):nil);let s=data.flatMap{CGImageSourceCreateWithData($0 as CFData,[kCGImageSourceShouldCache:false] as CFDictionary)} ?? source,index=source != nil ? page:0;let o:[CFString:Any]=[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:width,kCGImageSourceShouldCacheImmediately:true];if let s,let d=CGImageSourceCreateThumbnailAtIndex(s,index,o as CFDictionary){image=d}else if let data{let t=try TemporaryDirectory(),f=t.url.appendingPathComponent(URL(fileURLWithPath:names[page]).lastPathComponent);try data.write(to:f);image=try NativeFile(f,engine:f.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF").image(0,width:width)}else if source != nil{image=try NativeFile(url,engine:url.pathExtension.lowercased()=="jxl" ? "JPEGXL":"MuPDF").image(page,width:width)}else{throw ReadError("The installed image decoder cannot read this image")}}
         cache.append((key,image));while cache.count>3 || (cache.count>1 && cache.reduce(0,{$0+$1.1.bytesPerRow*$1.1.height})>64*1024*1024){cache.removeFirst()};return image}
+    var hasText:Bool{native?.hasText == true}
     func relayout(fontSize:Double,lineHeight:Double,margin:Double,font:String)->Int?{guard let n=native?.relayout(fontSize:fontSize,lineHeight:lineHeight,margin:margin,font:font) else{return nil};count=n;cache.removeAll();return n}
     func frameDelay(_ p:Int)->Double?{guard url.pathExtension.lowercased()=="gif",count>1,let source,let props=CGImageSourceCopyPropertiesAtIndex(source,p,nil) as? [CFString:Any],let gif=props[kCGImagePropertyGIFDictionary] as? [CFString:Any]else{return nil};return max(0.02,gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? gif[kCGImagePropertyGIFDelayTime] as? Double ?? 0.1)}
     func find(_ q:String,after p:Int)->Int?{guard let native,native.hasText,!q.isEmpty,count>0 else{return nil};for o in 1...count{if Task.isCancelled{return nil};let i=(p+o)%count;if native.text(i)?.localizedCaseInsensitiveContains(q)==true{return i}};return nil}
@@ -96,7 +97,7 @@ actor Pages{
                 ForEach(Array((state.rtl ? Array(images.reversed()):images).enumerated()),id:\.offset){_,image in page(image,size,scale,columns)}
             }.frame(minWidth:size.width,minHeight:size.height)
         }
-        .task(id:"\(state.page):\(target):\(state.spread)"){
+        .task(id:"\(state.page):\(target):\(state.spread):\(state.renderRevision)"){
             do{
                 var r=[try await pages.image(state.page,width:target)]
                 if state.spread,state.page+1<state.count{r.append(try await pages.image(state.page+1,width:target))}
@@ -110,7 +111,7 @@ actor Pages{
         if state.command.name=="print"{
             Task{if let image=try? await pages.image(state.page,width:2400){let v=NSImageView();v.image=NSImage(cgImage:image,size:.zero);v.imageScaling = .scaleProportionallyUpOrDown;v.frame=NSRect(x:0,y:0,width:612,height:792);NSPrintOperation(view:v).run()}}
         }else if state.command.name=="style"{
-            Task{if let n=await pages.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.count=n;state.page=min(state.page,max(0,n-1));state.send("page",number:Double(state.page))}}
+            Task{if let n=await pages.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.count=n;state.page=min(state.page,max(0,n-1));state.renderRevision += 1;state.send("page",number:Double(state.page))}}
         }else if state.command.name=="find"{
             searchGeneration += 1;let generation=searchGeneration,q=state.command.text,p=state.page,id=state.command.id
             Task{let m=await pages.find(q,after:p);guard generation==searchGeneration,state.command.id==id,case .pages(let a)? = state.document?.content,a===pages else{return};if let m{state.page=m;state.send("page",number:Double(m));state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}
@@ -130,6 +131,6 @@ private struct WindowScale:NSViewRepresentable{ @Binding var scale:CGFloat;func 
 private struct PageOffsetKey:PreferenceKey{static var defaultValue:[Int:CGFloat]=[:];static func reduce(value:inout[Int:CGFloat],nextValue:()->[Int:CGFloat]){value.merge(nextValue(),uniquingKeysWith:{_,b in b})}}
 @MainActor private struct LazyPage:View{
     @ObservedObject var state:ReaderState;let pages:Pages,index:Int,width:Int,scale:CGFloat;@State private var image:CGImage?
-    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation))).scaleEffect(state.fit=="custom" ? state.zoom:1)}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).background(GeometryReader{g in Color.clear.preference(key:PageOffsetKey.self,value:[index:g.frame(in:.named("pages")).midY])}).task(id:width){do{image=try await pages.image(index,width:width)}catch{if !Task.isCancelled{state.error=error.localizedDescription}}}.onDisappear{image=nil}}
+    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation))).scaleEffect(state.fit=="custom" ? state.zoom:1)}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).background(GeometryReader{g in Color.clear.preference(key:PageOffsetKey.self,value:[index:g.frame(in:.named("pages")).midY])}).task(id:"\(width):\(state.renderRevision)"){do{image=try await pages.image(index,width:width)}catch{if !Task.isCancelled{state.error=error.localizedDescription}}}.onDisappear{image=nil}}
 }
 #endif
