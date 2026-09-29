@@ -167,14 +167,14 @@ private struct LeafCommands:Commands{
             Button("Open…",action:openFiles).keyboardShortcut("o")
             Menu("Open Recent"){ForEach(NSDocumentController.shared.recentDocumentURLs.filter{FileManager.default.fileExists(atPath:$0.path)},id:\.self){u in Button(u.lastPathComponent){if let state{state.open(u)}else{openWindow(id:"reader",value:WindowPayload(path:u.path))}}};Divider();Button("Clear Menu"){NSDocumentController.shared.clearRecentDocuments(nil)}}
         }
-        CommandGroup(after:.saveItem){
+        CommandGroup(replacing:.saveItem){
             Button("Save a Copy…"){state?.saveCopy()}.keyboardShortcut("s",modifiers:[.command,.shift]).disabled(state?.canSaveCopy != true)
             Button("Reload"){state?.reload()}.keyboardShortcut("r").disabled(state?.document==nil)
             Button("Show in Finder"){if let u=state?.document?.url{NSWorkspace.shared.activateFileViewerSelecting([u])}}.disabled(state?.document==nil)
             Button("Copy File Path"){state?.copyPath()}.disabled(state?.document==nil)
             Button("Close Document"){state?.close()}.disabled(state?.document==nil)
         }
-        CommandGroup(after:.printItem){Button(state?.printTitle ?? "Print…"){state?.printDocument()}.keyboardShortcut("p").disabled(state?.document==nil)}
+        CommandGroup(replacing:.printItem){Button(state?.printTitle ?? "Print…"){state?.printDocument()}.keyboardShortcut("p").disabled(state?.document==nil)}
         CommandGroup(after:.toolbar){Button("Toggle Contents"){state?.showContents.toggle()}.keyboardShortcut("t",modifiers:[.command,.shift]).disabled(state?.hasDocument != true);Button("Enter Full Screen"){NSApp.keyWindow?.toggleFullScreen(nil)}.keyboardShortcut("f",modifiers:[.command,.control])}
         CommandMenu("Reading"){
             Button("Find…"){state?.showFindPanel()}.keyboardShortcut("f").disabled(state?.supportsSearch != true)
