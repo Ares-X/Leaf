@@ -26,7 +26,7 @@ public final class Archive:@unchecked Sendable{
             result.append(.init(name:String(cString:name),size:archive_entry_size(entry)))
         }
         entries=result
-        positions=Dictionary(uniqueKeysWithValues:result.enumerated().map{($0.element.name,$0.offset)})
+        positions=Dictionary(result.enumerated().map{($0.element.name,$0.offset)},uniquingKeysWith:{first,_ in first})
     }
 
     deinit{if let cursor{archive_read_free(cursor)}}
