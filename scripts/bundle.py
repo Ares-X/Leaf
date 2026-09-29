@@ -72,8 +72,8 @@ if not core:
 
 # Format.swift is the single source of truth, including compound suffixes.
 groups = re.findall(r'\(\.(\w+), "([^"]+)"\)', (root / 'Sources/LeafCore/Format.swift').read_text())
-suffixes = [s for kind, s in groups if not core or kind not in ('mupdf', 'djvu', 'chm')]
-if core: suffixes = [' '.join(x for x in s.split() if x != 'jxl') for s in suffixes]
+suffixes=[s for kind,s in groups if not core or kind not in ('mupdf','djvu','chm','lit','postscript')]
+if core:suffixes=[' '.join(x for x in s.split() if x!='jxl') for s in suffixes]
 info = dict(CFBundleName='Leaf', CFBundleDisplayName='Leaf', CFBundleExecutable='Leaf',
             CFBundleIdentifier='dev.aresx.leaf', CFBundlePackageType='APPL',
             CFBundleShortVersionString='0.2.0', CFBundleVersion='2',
