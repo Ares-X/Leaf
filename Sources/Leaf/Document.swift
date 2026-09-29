@@ -12,7 +12,7 @@ func runLeafProcess(_ process:Process)throws{
 final class TemporaryDirectory{let url=FileManager.default.temporaryDirectory.appendingPathComponent("Leaf-"+UUID().uuidString,isDirectory:true);init()throws{try FileManager.default.createDirectory(at:url,withIntermediateDirectories:true)};deinit{try? FileManager.default.removeItem(at:url)}}
 
 struct ReadingDocument{
-    enum Content{case pdf(URL,Data?),text(String),book(BookSource),pages(Pages)}
+    enum Content{case pdf(URL,Data?),text(String),chm(CHMSource),pages(Pages)}
     let url:URL,content:Content,temporary:TemporaryDirectory?
     init(url:URL,content:Content,temporary:TemporaryDirectory?=nil){self.url=url;self.content=content;self.temporary=temporary}
     static func open(_ url:URL)throws->ReadingDocument{
@@ -30,7 +30,7 @@ struct ReadingDocument{
             catch{return .init(url:url,content:.text(decode(try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe)))))}
         case .tcr:return .init(url:url,content:.text(decode(try LegacyText.tcr(Data(contentsOf:url,options:.mappedIfSafe))))
         case .book,.markdown,.html:return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))
-        case .chm:return .init(url:url,content:.book(try BookSource(url,format:format)))
+        case .chm:return .init(url:url,content:.chm(try CHMSource(url)))
         case .lit:
             let (temp,root)=try LitConverter.convert(url);return .init(url:url,content:.pages(try Pages(root,format:.mupdf)),temporary:temp)
         case .image,.comic,.mupdf,.djvu:return .init(url:url,content:.pages(try Pages(url,format:format)))
