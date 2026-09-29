@@ -35,9 +35,14 @@ API Document *lf_open(const char *path, char *error) {
     return d;
 }
 API unsigned char *lf_render(Document *d,int page,int width,int *info,char *error){
-    (void)page;(void)width;(void)error;
-    if(d->width<=0||d->height<=0||d->width>INT_MAX/4||(size_t)d->height>SIZE_MAX/((size_t)d->width*4))return NULL;
-    info[0]=d->width;info[1]=d->height;info[2]=d->width*4;info[3]=4;
-    size_t n=(size_t)info[2]*(size_t)info[1];unsigned char *out=malloc(n);
-    if(out)memcpy(out,d->pixels,n);return out;
+    (void)page;(void)error;
+    if(d->width<=0||d->height<=0||d->width>INT_MAX/4)return NULL;
+    int ow=d->width,oh=d->height;
+    if(width>0 && width<ow){oh=(int)((double)oh*width/ow);ow=width;}
+    if(ow<=0||oh<=0||ow>INT_MAX/4||(size_t)oh>SIZE_MAX/((size_t)ow*4))return NULL;
+    info[0]=ow;info[1]=oh;info[2]=ow*4;info[3]=4;
+    size_t n=(size_t)info[2]*(size_t)oh;unsigned char *out=malloc(n);if(!out)return NULL;
+    if(ow==d->width){memcpy(out,d->pixels,n);return out;}
+    for(int y=0;y<oh;y++){int sy=(int)((int64_t)y*d->height/oh);for(int x=0;x<ow;x++){int sx=(int)((int64_t)x*d->width/ow);memcpy(out+((size_t)y*ow+x)*4,d->pixels+((size_t)sy*d->width+sx)*4,4);}}
+    return out;
 }
