@@ -34,7 +34,7 @@ actor CHMSource{
     func makeCoordinator()->Coordinator{Coordinator(state:state,source:source)}
     func makeNSView(context:Context)->WKWebView{let c=context.coordinator,x=WKWebViewConfiguration();x.websiteDataStore = .nonPersistent();x.setURLSchemeHandler(c,forURLScheme:"leaf");x.userContentController.add(c,name:"leaf")
         let style="\(state.font)|\(state.fontSize)|\(state.lineHeight)|\(state.margin)|\(state.theme)"
-        let s="window.leafSpread=\(state.spread ? 2:1);window.leafFlow='\(state.flow=="continuous" ? "scrolled":"paginated")';window.leafStyle='\(style)';"
+        let s="window.leafStyle='\(style)';"
         x.userContentController.addUserScript(WKUserScript(source:s,injectionTime:.atDocumentStart,forMainFrameOnly:true));let v=WKWebView(frame:.zero,configuration:x);v.navigationDelegate=c;v.load(URLRequest(url:URL(string:"leaf://reader/reader.html")!));return v}
     func updateNSView(_ v:WKWebView,context:Context){let c=context.coordinator;guard c.command != state.command.id else{return};c.command=state.command.id;if state.command.name=="print"{v.printView(nil);return};if c.ready{c.deliver(state.command,to:v)}else{c.pending=state.command}}
     static func dismantleNSView(_ v:WKWebView,coordinator:Coordinator){coordinator.requests.values.forEach{$0.cancel()};coordinator.requests.removeAll();v.configuration.userContentController.removeScriptMessageHandler(forName:"leaf");v.navigationDelegate=nil;v.stopLoading()}
