@@ -1,44 +1,24 @@
-// Foliate supplies parsing, pagination, CFI, links, selection and search; Leaf supplies local bytes.
+// Foliate supplies CHM pagination, links, selection and search; Leaf supplies CHMLib bytes.
 import './foliate/view.js'
 const post = (type, data = {}) => window.webkit.messageHandlers.leaf.postMessage({ type, ...data })
 const base = 'leaf://book'
 const entryURL = name => `${base}/entry/${name.split('/').map(encodeURIComponent).join('/')}`
 const fetchOK = async url => { const response = await fetch(url); if (!response.ok) throw Error(`Cannot read ${url}`); return response }
+const parse = html => new DOMParser().parseFromString(html, 'text/html')
 const flatten = (items = [], depth = 0) => items.flatMap(item => [
     { title: item.label || 'Untitled', target: String(item.href), depth }, ...flatten(item.subitems, depth + 1),
 ])
-// A Blob-like slice backed by native seek/read. No whole-book fetch or base64 copy for MOBI/KF8.
-class LocalSlice {
-    constructor(name, size, start = 0, end = size) { Object.assign(this, { name, size: end - start, start, end }) }
-    slice(start = 0, end = this.size) {
-        const at = n => Math.max(0, Math.min(this.size, n < 0 ? this.size + n : n))
-        const first = at(start), last = Math.max(first, at(end))
-        return new LocalSlice(this.name, this.size, this.start + first, this.start + last)
-    }
-    async arrayBuffer() { return (await fetchOK(`${base}/raw?start=${this.start}&end=${this.end}`)).arrayBuffer() }
-    async text() { return new TextDecoder().decode(await this.arrayBuffer()) }
-}
-const parse = html => new DOMParser().parseFromString(html, 'text/html')
-const epubSource = async meta => {
-    const sizes = new Map(meta.entries.map(x => [x.filename, x.size]))
-    return {
-        loadText: async name => sizes.has(name) ? (await fetchOK(entryURL(name))).text() : null,
-        loadBlob: async (name, type) => sizes.has(name) ? new Blob([await (await fetchOK(entryURL(name))).arrayBuffer()], { type }) : null,
-        getSize: name => sizes.get(name) ?? 0,
-        sha1: async text => new Uint8Array(await (await fetchOK(`${base}/sha1?text=${encodeURIComponent(text)}`)).arrayBuffer()),
-    }
-}
 const htmlBook = async meta => {
     const paths = meta.entries.map(x => x.filename).filter(x => /\.x?html?$/i.test(x))
     const index = paths.findIndex(x => /(^|\/)(index|default|welcome)\.html?$/i.test(x))
     if (index > 0) paths.unshift(...paths.splice(index, 1))
+    if (!paths.length) throw Error('This CHM contains no HTML pages')
     const contents = async path => (await fetchOK(entryURL(path))).text()
-    if (!paths.length) throw Error('This document contains no HTML pages')
     const localHref = href => href.replace(/^(?:mk:@MSITStore:|ms-its:|its:).*?::\/?/i, '').replace(/\\/g, '/')
     const resolve = href => {
         const url = new URL(localHref(href), entryURL(paths[0]))
         const path = decodeURIComponent(url.pathname.replace(/^\/entry\//, ''))
-        const index = paths.findIndex(p => meta.format === 'chm' ? p.toLowerCase() === path.toLowerCase() : p === path)
+        const index = paths.findIndex(p => p.toLowerCase() === path.toLowerCase())
         if (index < 0) return null
         const hash = decodeURIComponent(url.hash.slice(1))
         return { index, anchor: doc => hash ? doc.getElementById(hash) : 0 }
@@ -47,36 +27,22 @@ const htmlBook = async meta => {
         let blob
         const createDocument = async () => {
             const doc = parse(await contents(path)), tag = doc.createElement('base')
-            tag.href = entryURL(path)
-            doc.head.prepend(tag)
-            // All scripts are disabled by the reader's CSP. No generic HTML sanitizer or parser framework.
-            return doc
+            tag.href = entryURL(path); doc.head.prepend(tag); return doc
         }
-        return { id: path, size: 1, createDocument,
-            resolveHref: href => new URL(localHref(href), entryURL(path)).href,
-            load: async () => {
-                if (!blob) blob = URL.createObjectURL(new Blob([(await createDocument()).documentElement.outerHTML], { type: 'text/html' }))
-                return blob
-            }, unload: () => { if (blob) URL.revokeObjectURL(blob); blob = null },
-        }
+        return { id:path,size:1,createDocument,resolveHref:href=>new URL(localHref(href),entryURL(path)).href,
+            load:async()=>{if(!blob)blob=URL.createObjectURL(new Blob([(await createDocument()).documentElement.outerHTML],{type:'text/html'}));return blob},
+            unload:()=>{if(blob)URL.revokeObjectURL(blob);blob=null} }
     })
-    let toc = paths.map(path => ({ label: path, href: entryURL(path) }))
-    {
-        const hhc = meta.entries.find(x => /\.hhc$/i.test(x.filename))
-        if (hhc) {
-            const doc = parse(await (await fetchOK(entryURL(hhc.filename))).text())
-            const links = [...doc.querySelectorAll('object')].map(object => {
-                const values = Object.fromEntries([...object.querySelectorAll('param')].map(p => [p.getAttribute('name')?.toLowerCase(), p.getAttribute('value')]))
-                return { label: values.name, href: values.local && new URL(localHref(values.local), entryURL(hhc.filename)).href }
-            }).filter(x => x.href)
-            if (links.length) toc = links
-        }
+    let toc = paths.map(path => ({ label:path,href:entryURL(path) }))
+    const hhc = meta.entries.find(x => /\.hhc$/i.test(x.filename))
+    if (hhc) {
+        const doc=parse(await (await fetchOK(entryURL(hhc.filename))).text())
+        const links=[...doc.querySelectorAll('object')].map(object=>{const values=Object.fromEntries([...object.querySelectorAll('param')].map(p=>[p.getAttribute('name')?.toLowerCase(),p.getAttribute('value')]));return {label:values.name,href:values.local&&new URL(localHref(values.local),entryURL(hhc.filename)).href}}).filter(x=>x.href)
+        if(links.length)toc=links
     }
-    return { sections, toc, metadata: { title: meta.name }, resolveHref: resolve,
-        isExternal: href => /^(https?:|mailto:)/i.test(href),
-        splitTOCHref: href => { const u = new URL(href, entryURL(paths[0])); return [decodeURIComponent(u.pathname.replace(/^\/entry\//, '')), u.hash.slice(1)] },
-        getTOCFragment: (doc, id) => doc.getElementById(id),
-    }
+    return {sections,toc,metadata:{title:meta.name},resolveHref:resolve,isExternal:href=>/^(https?:|mailto:)/i.test(href),
+        splitTOCHref:href=>{const u=new URL(href,entryURL(paths[0]));return [decodeURIComponent(u.pathname.replace(/^\/entry\//,'')),u.hash.slice(1)]},
+        getTOCFragment:(doc,id)=>doc.getElementById(id)}
 }
 
 const view = document.createElement('foliate-view')
@@ -130,26 +96,13 @@ view.addEventListener('load', ({ detail: { doc } }) => doc.addEventListener('key
 }))
 try {
     const meta = await (await fetchOK(`${base}/meta`)).json()
-    let book
-    if (meta.format === 'chm') book = await htmlBook(meta)
-    else if (meta.entries.some(x => /\.opf$/i.test(x.filename)) || meta.name.toLowerCase().endsWith('.epub')) {
-        const { EPUB } = await import('./foliate/epub.js')
-        book = await new EPUB(await epubSource(meta)).init()
-    } else if (/\.(fb2|fb2z|fbz|zfb2|fb2\.zip)$/i.test(meta.name)) {
-        const { makeFB2 } = await import('./foliate/fb2.js')
-        const fb2 = meta.entries.find(x => /\.fb2$/i.test(x.filename))
-        const file = await (await fetchOK(fb2 ? entryURL(fb2.filename) : `${base}/raw`)).blob()
-        book = await makeFB2(file)
-    } else {
-        const { MOBI } = await import('./foliate/mobi.js'), { unzlibSync } = await import('./foliate/vendor/fflate.js')
-        book = await new MOBI({ unzlib: unzlibSync }).open(new LocalSlice(meta.name, meta.size))
-    }
+    const book = await htmlBook(meta)
     await view.open(book)
     view.renderer.setAttribute('max-column-count', String(window.leafSpread ?? 1))
     view.renderer.setAttribute('flow', window.leafFlow ?? 'paginated')
     style(window.leafStyle)
     post('toc', { items: flatten(book.toc) })
-    await view.init({ lastLocation: window.leafLocation || undefined })
+    await view.init()
     post('ready')
 } catch (error) { post('error', { message: error.message }) }
 window.addEventListener('pagehide', () => { ++searchID; view.close() })
