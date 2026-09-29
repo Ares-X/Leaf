@@ -24,13 +24,20 @@ public struct Archive: Sendable {
         }
         entries = result
     }
+    public static func isSafeEntryName(_ name:String)->Bool{
+        let normalized=name.replacingOccurrences(of:"\\",with:"/")
+        guard !normalized.hasPrefix("/"),!normalized.split(separator:"/").contains("..") else{return false}
+        return true
+    }
     public var images: [String] {
         entries.map(\.name).filter {
+            Self.isSafeEntryName($0) &&
             !$0.split(separator: "/").contains(where: { $0.hasPrefix(".") || $0 == "__MACOSX" }) &&
             (Format.detect($0) == .image || ["svg", "jxr", "hdp", "wdp"].contains(($0 as NSString).pathExtension.lowercased()))
         }.sorted { $0.compare($1, options: [.numeric, .caseInsensitive]) == .orderedAscending }
     }
     public func data(_ name: String) throws -> Data {
+        guard Self.isSafeEntryName(name) else{throw ReadError("Invalid archive entry path")}
         let handle = try Self.open(url)
         defer { archive_read_free(handle) }
         var entry: OpaquePointer?
@@ -38,13 +45,14 @@ public struct Archive: Sendable {
             try Task.checkCancellation()
             guard let path = archive_entry_pathname_utf8(entry) ?? archive_entry_pathname(entry),
                   String(cString: path) == name else { archive_read_data_skip(handle); continue }
-            let expected=archive_entry_size(entry);guard expected>=0,expected<=512*1024*1024 else{throw ReadError("Archive entry is too large")}
-            var result=Data();result.reserveCapacity(Int(expected));var buffer=[UInt8](repeating:0,count:64*1024)
+            let expected=archive_entry_size(entry);guard expected >= 0, expected <= 512 * 1024 * 1024 else { throw ReadError("Archive entry is too large") }
+            var result = Data();result.reserveCapacity(Int(expected));var buffer=[UInt8](repeating:0,count:64*1024)
             while true {
                 try Task.checkCancellation()
                 let n = archive_read_data(handle, &buffer, buffer.count)
                 if n == 0 { return result }
                 guard n > 0 else { throw Self.error(handle) }
+                guard result.count <= 512 * 1024 * 1024 - n else { throw ReadError("Archive entry is too large") }
                 result.append(contentsOf: buffer.prefix(n))
             }
         }

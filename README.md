@@ -28,7 +28,7 @@ for every format. Rare formats need the full build's decoder libraries.
 | EPUB, MOBI, AZW/AZW1/AZW3/KF8, PRC | Foliate + WebKit; native slice/entry reads, no Calibre |
 | FB2, FB2Z, FBZ, ZFB2, FB2.ZIP | Foliate + libarchive |
 | AZW4/Print Replica | Palm record adapter → embedded PDF → PDFKit |
-| Palm DOC/PDB, TCR | small legacy adapters → NSTextView; TealDoc/Plucker are detected as unsupported rather than mis-decoded |
+| Palm DOC/PDB (including TealDoc/Plucker creator sniffing), TCR | small legacy adapters → NSTextView |
 | TXT, JS, JSON, XML, LOG, NFO, FILE_ID.DIZ, READ.ME | NSTextView; UTF-8 / Foundation encoding detection |
 | Microsoft Reader LIT | ConvertLIT helper → OEB/EPUB → Foliate; DRM5 remains unsupported |
 | Markdown | Marked (GFM) → Foliate; not a home-written Markdown parser |
@@ -90,16 +90,16 @@ release must also supply the corresponding dependency sources and license notice
 ```sh
 ./scripts/build-app.sh --core  # omit MuPDF/DjVu/CHM/JXL; fewer formats, not full parity
 ./scripts/run-dev.sh           # prepare JS resources, then swift run
-swift test                    # focused portable core checks; also works on Linux
+swift test                    # three focused portable core checks; also works on Linux
 ```
 
 Optional PostScript: `brew install ghostscript`.
 
 ## Verification in this change
 
-- Previous Linux/Swift portable verification covered: actual
+- Linux / Swift 6.2.1: portable build and three XCTest cases passed: actual
   Deflate/ZIP64 entry reads/natural ordering, Palm/TCR/Print Replica byte handling,
-  compound-extension routing and signature sniffing. Re-run `swift test` on the final checkout before release.
+  and compound-extension routing.
 - C MuPDF bridge: compiled and executed on Linux against the available MuPDF
   1.26.12; SVG rasterization and extracted text checked.
 - macOS-target Swift **syntax parsing only**, JavaScript syntax and shell/Python syntax checked.

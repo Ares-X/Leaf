@@ -11,6 +11,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 contents = Path(sys.argv[1]).resolve()
 core = '--core' in sys.argv[2:]
+helper_arg = next((x.split('=',1)[1] for x in sys.argv[2:] if x.startswith('--helper=')), None)
 frameworks = contents / 'Frameworks'
 licenses = contents / 'Resources' / 'Licenses'
 frameworks.mkdir(parents=True, exist_ok=True)
@@ -70,26 +71,24 @@ if not core:
     shutil.copy(root / 'build' / 'native-dependencies.json', licenses / 'native-dependencies.json')
     shutil.copy(root / 'build' / 'mupdf-revision.txt', licenses / 'mupdf-revision.txt')
 
-# Bundle non-system dependencies of the LIT helper too; users must not need Homebrew at runtime.
-tool=contents/'Resources'/'Tools'/'clit'
-if tool.exists():
-    ident=run('otool','-D',tool).splitlines()[1:]
-    rpaths=re.findall(r'cmd LC_RPATH\n.*?\n\s*path (.+?) \(offset',run('otool','-l',tool))
-    for line in run('otool','-L',tool).splitlines()[1:]:
-        dependency=line.strip().split(' (compatibility')[0]
-        if dependency in ident or dependency.startswith(('/usr/lib/','/System/Library/')): continue
+if helper_arg:
+    helper_source = Path(helper_arg).resolve()
+    helper_target = contents / 'Resources' / 'Tools' / 'clit'
+    ident = run('otool', '-D', helper_source).splitlines()[1:]
+    for line in run('otool', '-L', helper_source).splitlines()[1:]:
+        dependency = line.strip().split(' (compatibility')[0]
+        if dependency in ident or dependency.startswith(('/usr/lib/', '/System/Library/')): continue
+        resolved = Path(dependency.replace('@loader_path', str(helper_source.parent)))
         if dependency.startswith('@rpath/'):
-            candidates=[Path(p.replace('@loader_path',str(tool.parent)))/dependency[len('@rpath/'):] for p in rpaths]
-            resolved=next((p for p in candidates if p.exists()),None)
-        elif dependency.startswith('@loader_path/'): resolved=tool.parent/dependency[len('@loader_path/'):]
-        else: resolved=Path(dependency)
-        if resolved is None or not resolved.is_file(): raise RuntimeError(f'Cannot resolve {dependency} from {tool}')
-        child=bundle(resolved)
-        subprocess.check_call(['install_name_tool','-change',dependency,'@loader_path/../../Frameworks/'+child.name,str(tool)])
-    subprocess.check_call(['codesign','--force','--sign','-',str(tool)])
+            rpaths = re.findall(r'cmd LC_RPATH\n.*?\n\s*path (.+?) \(offset', run('otool', '-l', helper_source))
+            resolved = next((Path(x.replace('@loader_path', str(helper_source.parent))) / dependency[len('@rpath/'):] for x in rpaths if (Path(x.replace('@loader_path', str(helper_source.parent))) / dependency[len('@rpath/'):]).exists()), None)
+        if resolved is None or not resolved.is_file(): raise RuntimeError(f'Cannot resolve helper dependency {dependency}')
+        child = bundle(resolved)
+        subprocess.check_call(['install_name_tool','-change',dependency,'@loader_path/../../Frameworks/'+child.name,str(helper_target)])
+    subprocess.check_call(['codesign','--force','--sign','-',str(helper_target)])
 
 # Format.swift is the single source of truth, including compound suffixes.
-groups = re.findall(r'\(\.(\w+), "([^"]+)"\)', (root / 'Sources/LeafCore/Format.swift').read_text())
+groups = re.findall(r'\(\.(\w+),\s*"([^"]+)"\)', (root / 'Sources/LeafCore/Format.swift').read_text())
 suffixes=[s for kind,s in groups if not core or kind not in ('mupdf','djvu','chm','lit','postscript')]
 if core:suffixes=[' '.join(x for x in s.split() if x!='jxl') for s in suffixes]
 info = dict(CFBundleName='Leaf', CFBundleDisplayName='Leaf', CFBundleExecutable='Leaf',

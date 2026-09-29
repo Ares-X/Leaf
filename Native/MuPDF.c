@@ -38,12 +38,13 @@ API unsigned char *lf_render(Document *d, int page, int width, int *info, char *
         p = fz_load_page(d->ctx, d->doc, page);
         fz_rect box = fz_bound_page(d->ctx, p);
         float page_width=box.x1-box.x0; if(width<=0 || !(page_width>0)) fz_throw(d->ctx,FZ_ERROR_GENERIC,"Invalid page size");
+        if(width>16384) fz_throw(d->ctx,FZ_ERROR_GENERIC,"Render width is too large");
         float scale=(float)width/page_width;
         pix = fz_new_pixmap_from_page(d->ctx, p, fz_scale(scale, scale), fz_device_rgb(d->ctx), 0);
         info[0] = fz_pixmap_width(d->ctx, pix); info[1] = fz_pixmap_height(d->ctx, pix);
         info[2] = fz_pixmap_stride(d->ctx, pix); info[3] = fz_pixmap_components(d->ctx, pix);
         if(info[0]<=0||info[1]<=0||info[2]<=0||(size_t)info[1]>SIZE_MAX/(size_t)info[2]) fz_throw(d->ctx,FZ_ERROR_GENERIC,"Invalid page bitmap");
-        size_t size=(size_t)info[2]*(size_t)info[1]; out=malloc(size);
+        size_t size=(size_t)info[2]*(size_t)info[1]; if(size>512u*1024u*1024u) fz_throw(d->ctx,FZ_ERROR_GENERIC,"Page bitmap is too large"); out=malloc(size);
         if (!out) fz_throw(d->ctx, FZ_ERROR_GENERIC, "Cannot allocate page bitmap");
         memcpy(out, fz_pixmap_samples(d->ctx, pix), size);
     }

@@ -17,8 +17,9 @@ cp "$BIN/Leaf" "$APP/MacOS/Leaf"
 strip -x "$APP/MacOS/Leaf"
 # Keep one resource copy. BookReader uses this path in an app, Bundle.module in swift run.
 cp -R Sources/Leaf/Resources/Reader "$APP/Resources/Reader"
-if [ "$CORE" != --core ]; then mkdir -p "$APP/Resources/Tools"; cp "$(command -v clit)" "$APP/Resources/Tools/clit"; chmod 755 "$APP/Resources/Tools/clit"; fi
-python3 scripts/bundle.py "$APP" ${CORE:+"$CORE"}
+CLIT=""
+if [ "$CORE" != --core ]; then mkdir -p "$APP/Resources/Tools"; CLIT="$(command -v clit)"; cp "$CLIT" "$APP/Resources/Tools/clit"; chmod 755 "$APP/Resources/Tools/clit"; fi
+python3 scripts/bundle.py "$APP" ${CORE:+"$CORE"} ${CLIT:+"--helper=$CLIT"}
 codesign --force --sign - "$APP/.."
 echo "Built dist/Leaf.app (ad-hoc signed local development build, not notarized)."
 du -sh dist/Leaf.app

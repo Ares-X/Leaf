@@ -7,7 +7,7 @@ API int lf_count(Document *d) { (void)d; return 1; }
 API Document *lf_open(const char *path, char *error) {
     FILE *f = fopen(path, "rb"); if (!f) return NULL;
     fseek(f, 0, SEEK_END); long size = ftell(f); rewind(f);
-    if (size <= 0) { fclose(f); return NULL; }
+    if (size <= 0 || (unsigned long)size > 512u*1024u*1024u) { if(error) snprintf(error,512,"JPEG XL file is too large or empty"); fclose(f); return NULL; }
     unsigned char *bytes = malloc((size_t)size);
     if (!bytes || fread(bytes, 1, (size_t)size, f) != (size_t)size) { fclose(f); free(bytes); return NULL; }
     fclose(f);
