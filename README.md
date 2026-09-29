@@ -8,9 +8,9 @@ Calibre/unar conversions with mature decoders and a small native shell.
 
 ## Reading
 
-Open/Finder/drop/recent files; contents; search; page/line navigation;
+Open/Finder/drop/recent files; native macOS multi-window/tabs (including tab detach/merge); contents; search; page/line navigation;
 zoom; actual/fit page/fit width; paged/continuous; two-page and right-to-left reading; GIF playback;
-font family/size, line height and margins for reflowable text; full screen;
+font family/size, line height and margins for text and MuPDF reflowable books; full screen;
 one bookmark per document; persistent page/text position.
 PDF uses PDFKit and plain text uses NSTextView. Reflowable books use MuPDF; WebKit/Foliate is retained only for CHM.
 There is no Electron, Chromium distribution, Node runtime, library database,
@@ -57,8 +57,7 @@ not executed. Fixed-layout EPUB and CHM still need sample testing.
 - Format routing is centralized: longest extension first, then a small Sumatra-derived magic sniffer for mislabeled files.
 - Native libraries are loaded only when their format is opened and released with the document.
 - The app does not unpack EPUB/comic archives into a temporary library.
-- Comic images are decoded for the viewport and cached as at most three images,
-  with a 64 MiB cache target. A single oversized image can exceed that target;
+- Comic images are decoded for the viewport and cached as at most three images. Sequential archive reads reuse one libarchive cursor instead of rescanning from the beginning for every page, with a 64 MiB cache target. A single oversized image can exceed that target;
   this is **not** a limit on total process memory. JPEG XL currently needs a full-frame decode.
 - Reflowable document layout is supplied by MuPDF. WebKit/Foliate is isolated to CHM rendering.
 - MuPDF is built for size without its duplicate PDF reader, JS,
@@ -108,7 +107,7 @@ Optional PostScript: `brew install ghostscript`.
 Next acceptance work is running the full build on macOS, checking the resource
 bridge and dylib loading, then testing representative files for every table row
 (including solid RAR, JPEG XR/XL/AVIF, malformed books and complex EPUB layout).
-Installed size, cold start, first page and total memory remain **unmeasured**.
+Installed size, cold start, first page and total memory remain **unmeasured**. The code now avoids opening PDFs twice and defers PDF outline traversal until the contents sidebar is requested; real large-file latency still requires the first macOS corpus run.
 
 ## License
 
