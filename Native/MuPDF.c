@@ -35,6 +35,17 @@ API int lf_count(Document *d) {
     fz_catch(d->ctx) { return 0; }
     return n;
 }
+API int lf_relayout(Document *d, float em, const char *css) {
+    if (!d || !fz_is_document_reflowable(d->ctx, d->doc)) return 0;
+    int n = 0;
+    fz_try(d->ctx) {
+        fz_style_document(d->ctx, d->doc, 1, css ? css : "");
+        fz_layout_document(d->ctx, d->doc, 420, 595, em > 0 ? em : 11);
+        n = fz_count_pages(d->ctx, d->doc);
+    }
+    fz_catch(d->ctx) { return 0; }
+    return n;
+}
 API unsigned char *lf_render(Document *d, int page, int width, int *info, char *error) {
     fz_page *p = NULL; fz_pixmap *pix = NULL; unsigned char *out = NULL;
     fz_var(p); fz_var(pix); fz_var(out);
