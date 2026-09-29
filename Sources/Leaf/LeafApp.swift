@@ -31,7 +31,7 @@ struct ReadingPosition:Codable{var page=0}
     @Published var theme = "system"
     @Published var rotation = 0
     @Published var reflowable = false
-    private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,restoreTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?
+    private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?
     private(set) var generation=0
 
     init(){
@@ -41,7 +41,6 @@ struct ReadingPosition:Codable{var page=0}
         if d.object(forKey:"lineHeight") != nil{lineHeight=d.double(forKey:"lineHeight")}
         if d.object(forKey:"margin") != nil{margin=d.double(forKey:"margin")}
         spread=d.bool(forKey:"spread");rtl=d.bool(forKey:"rtl")
-        if let p=d.string(forKey:"lastDocument"),FileManager.default.fileExists(atPath:p){restoreTask=Task{try? await Task.sleep(nanoseconds:300_000_000);guard !Task.isCancelled,document==nil,!busy else{return};open(URL(fileURLWithPath:p))}}
     }
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
@@ -55,14 +54,14 @@ struct ReadingPosition:Codable{var page=0}
     func send(_ name:String,text:String="",number:Double=0){command = .init(name:name,text:text,number:number)}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
-        restoreTask?.cancel();restoreTask=nil;generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;rotation=0;reflowable=false
+        generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;rotation=0;reflowable=false
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
             do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return}
                 if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page)}
-                document=opened;busy=false;watchFile(url);UserDefaults.standard.set(url.path,forKey:"lastDocument");NSDocumentController.shared.noteNewRecentDocumentURL(url)
+                document=opened;busy=false;watchFile(url);NSDocumentController.shared.noteNewRecentDocumentURL(url)
             }catch{if !Task.isCancelled{self.error=error.localizedDescription;busy=false}}}
     }
-    func close(){generation+=1;restoreTask?.cancel();persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];count=0;status="";reflowable=false;UserDefaults.standard.removeObject(forKey:"lastDocument")}
+    func close(){generation+=1;persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];count=0;status="";reflowable=false}
     func reload(){guard let u=document?.url else{return};persist();generation+=1;let g=generation;loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==generation{status="Reload failed";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if isCHM{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
@@ -98,17 +97,25 @@ struct ReadingPosition:Codable{var page=0}
     func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};go(String(p.page+1))}
 }
 
+struct WindowPayload:Codable,Hashable{
+    var id=UUID()
+    var path:String?
+    init(path:String?=nil){self.path=path}
+}
 private struct ReaderStateKey:FocusedValueKey{typealias Value=ReaderState}
 private extension FocusedValues{
     var readerState:ReaderState?{get{self[ReaderStateKey.self]}set{self[ReaderStateKey.self]=newValue}}
 }
 
 @MainActor private struct ReaderWindow:View{
+    @Binding var payload:WindowPayload
     @StateObject private var state=ReaderState()
     var body:some View{
         ReaderView(state:state).frame(minWidth:560,minHeight:400)
             .background(WindowTabs())
             .focusedSceneValue(\.readerState,state)
+            .task(id:payload.path){if state.document==nil,let path=payload.path,FileManager.default.fileExists(atPath:path){state.open(URL(fileURLWithPath:path))}}
+            .onChange(of:state.document?.url.path){payload.path=$0}
             .onOpenURL{state.open($0)}
             .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in state.persist()}
     }
@@ -120,10 +127,11 @@ private struct WindowTabs:NSViewRepresentable{
 
 private struct LeafCommands:Commands{
     @FocusedValue(\.readerState) private var state
+    @Environment(\.openWindow) private var openWindow
     var body:some Commands{
         CommandGroup(after:.newItem){
-            Button("Open…"){state?.chooseFile()}.keyboardShortcut("o").disabled(state==nil)
-            Menu("Open Recent"){ForEach(NSDocumentController.shared.recentDocumentURLs.filter{FileManager.default.fileExists(atPath:$0.path)},id:\.self){u in Button(u.lastPathComponent){state?.open(u)}};Divider();Button("Clear Menu"){NSDocumentController.shared.clearRecentDocuments(nil)}}
+            Button("Open…",action:openFiles).keyboardShortcut("o")
+            Menu("Open Recent"){ForEach(NSDocumentController.shared.recentDocumentURLs.filter{FileManager.default.fileExists(atPath:$0.path)},id:\.self){u in Button(u.lastPathComponent){if let state{state.open(u)}else{openWindow(id:"reader",value:WindowPayload(path:u.path))}}};Divider();Button("Clear Menu"){NSDocumentController.shared.clearRecentDocuments(nil)}}
         }
         CommandGroup(after:.saveItem){
             Button("Save a Copy…"){state?.saveCopy()}.keyboardShortcut("s",modifiers:[.command,.shift]).disabled(state?.document==nil)
@@ -145,11 +153,17 @@ private struct LeafCommands:Commands{
             Divider();Button("Light"){state?.setTheme("light")};Button("Dark"){state?.setTheme("dark")};Button("System Theme"){state?.setTheme("system")}
         }
     }
+    private func openFiles(){
+        let panel=NSOpenPanel();panel.canChooseDirectories=true;panel.allowsMultipleSelection=true
+        panel.begin{result in guard result == .OK else{return};let urls=panel.urls;guard let first=urls.first else{return};if let state{state.open(first)}else{openWindow(id:"reader",value:WindowPayload(path:first.path))};for url in urls.dropFirst(){openWindow(id:"reader",value:WindowPayload(path:url.path))}}
+    }
 }
 
 @main @MainActor struct LeafApp:App{
     var body:some Scene{
-        WindowGroup("Leaf"){ReaderWindow()}.defaultSize(width:900,height:740).commands{LeafCommands()}
+        WindowGroup("Leaf",id:"reader",for:WindowPayload.self){$payload in ReaderWindow(payload:$payload)} defaultValue:{WindowPayload()}
+            .defaultSize(width:900,height:740)
+            .commands{LeafCommands()}
         Settings{SettingsView()}
     }
 }
