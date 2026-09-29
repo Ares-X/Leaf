@@ -65,7 +65,8 @@ window.leafCommand = async command => {
             style(`${family}|${Number(size) * command.number}|${line}|${margin}|${theme}`); break
         }
         case 'style': window.leafStyle = command.text; style(command.text); break
-         case 'find': {
+         case 'toc': post('toc', { items: flattenTOC(view.book.toc) }); break
+        case 'find': {
             if (!command.text) break
             if (query === command.text && hits.length) { selected = (selected + 1) % hits.length; await view.select(hits[selected].cfi); break }
             const id = ++searchID; query = command.text; hits = []; selected = -1
