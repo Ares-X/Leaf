@@ -21,23 +21,23 @@ actor Pages{
 }
 
 @MainActor struct RasterReader:View{
-    @ObservedObject var state:ReaderState;let pages:Pages;@State private var images:[CGImage]=[],isAnimation=false,playing=false
+    @ObservedObject var state:ReaderState;let pages:Pages;@State private var images:[CGImage]=[],isAnimation=false,playing=false,pinchStart:Double?
     var body:some View{GeometryReader{g in
         let scale=NSScreen.main?.backingScaleFactor ?? 2,columns=max(1,state.spread ? 2:1),target=state.fit=="actual" ? 4096:max(128,Int(g.size.width*scale*max(1,state.zoom)/CGFloat(columns)))
         ZStack{background
-            if state.flow=="continuous"{ScrollViewReader{proxy in ScrollView(.vertical){LazyVStack(spacing:4){ForEach(0..<state.count,id:\.self){i in LazyPage(state:state,pages:pages,index:i,width:target,scale:scale).id(i)}}}.onChange(of:state.command.id){_ in if state.command.name=="page"{withAnimation{proxy.scrollTo(Int(state.command.number),anchor:.top)}}}}}
+            if state.flow=="continuous"{ScrollViewReader{proxy in ScrollView(.vertical){LazyVStack(spacing:4){ForEach(0..<state.count,id:\.self){i in LazyPage(state:state,pages:pages,index:i,width:target,scale:scale).id(i)}}}.coordinateSpace(name:"pages").onPreferenceChange(PageOffsetKey.self){v in if let i=v.min(by:{abs($0.value)<abs($1.value)})?.key,state.page != i{state.page=i;state.persist()}}.onChange(of:state.command.id){_ in if state.command.name=="page"{withAnimation{proxy.scrollTo(Int(state.command.number),anchor:.top)}}}}}
             else{ScrollView([.horizontal,.vertical]){HStack(spacing:state.spread ? 4:0){ForEach(Array((state.rtl ? Array(images.reversed()):images).enumerated()),id:\.offset){_,image in page(image,g.size,scale,columns)}}.frame(minWidth:g.size.width,minHeight:g.size.height)}
                 .task(id:"\(state.page):\(target):\(state.spread):\(state.fit):\(state.zoom):\(state.rotation)"){do{var r=[try await pages.image(state.page,width:target)];if state.spread,state.page+1<state.count{r.append(try await pages.image(state.page+1,width:target))};guard !Task.isCancelled else{return};images=r;if state.page+r.count<state.count{_=try? await pages.image(state.page+r.count,width:target)}}catch{if !Task.isCancelled{state.error=error.localizedDescription}}}}
         }.focusable().onMoveCommand{d in if d == .left{state.turn(state.rtl ? 1:-1)};if d == .right{state.turn(state.rtl ? -1:1)}}
-        .gesture(MagnificationGesture().onChanged{state.setZoom(state.zoom*Double($0))})
+        .gesture(MagnificationGesture().onChanged{v in if pinchStart==nil{pinchStart=state.zoom};state.setZoom((pinchStart ?? state.zoom)*Double(v))}.onEnded{_ in pinchStart=nil})
     }.overlay(alignment:.topTrailing){if isAnimation{Button(playing ? "Pause":"Play"){playing.toggle()}.padding(8)}}.task{isAnimation=await pages.frameDelay(0) != nil;playing=isAnimation}
     .task(id:playing){while playing,!Task.isCancelled,let delay=await pages.frameDelay(state.page){do{try await Task.sleep(nanoseconds:UInt64(delay*1_000_000_000))}catch{return};guard !Task.isCancelled else{return};state.page=(state.page+1)%max(1,state.count)}}
     .onChange(of:state.command.id){_ in if state.command.name=="find"{let q=state.command.text,p=state.page,id=state.command.id;Task{let m=await pages.find(q,after:p);guard state.command.id==id,case .pages(let a)?=state.document?.content,a===pages else{return};if let m{state.page=m;state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}}}
     var background:Color{state.theme=="dark" ? Color(nsColor:NSColor(white:0.06,alpha:1)):state.theme=="light" ? .white:Color(nsColor:.windowBackgroundColor)}
     func page(_ image:CGImage,_ size:CGSize,_ scale:CGFloat,_ columns:Int)->some View{let iw=CGFloat(image.width)/scale,ih=CGFloat(image.height)/scale,slot=size.width/CGFloat(columns);return Image(decorative:image,scale:scale).resizable().aspectRatio(contentMode:.fit).rotationEffect(.degrees(Double(state.rotation))).frame(width:state.fit=="actual" ? iw*CGFloat(state.zoom):state.fit=="width" ? slot*CGFloat(state.zoom):nil,height:state.fit=="page" ? size.height*CGFloat(state.zoom):state.fit=="actual" ? ih*CGFloat(state.zoom):nil).frame(maxWidth:state.fit=="page" ? slot*CGFloat(state.zoom):nil)}
 }
-@MainActor private struct LazyPage:View{
+private struct PageOffsetKey:PreferenceKey{static var defaultValue:[Int:CGFloat]=[:];static func reduce(value:inout[Int:CGFloat],nextValue:()->[Int:CGFloat]){value.merge(nextValue(),uniquingKeysWith:{_,b in b})}}\n@MainActor private struct LazyPage:View{
     @ObservedObject var state:ReaderState;let pages:Pages,index:Int,width:Int,scale:CGFloat;@State private var image:CGImage?
-    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation)))}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).task(id:"\(width):\(state.rotation)"){image=try? await pages.image(index,width:width)}.onAppear{if abs(index-state.page)<=1{state.page=index;state.persist()}}}
+    var body:some View{Group{if let image{Image(decorative:image,scale:scale).resizable().scaledToFit().rotationEffect(.degrees(Double(state.rotation)))}else{ProgressView().frame(height:180)}}.frame(maxWidth:.infinity).background(GeometryReader{g in Color.clear.preference(key:PageOffsetKey.self,value:[index:g.frame(in:.named("pages")).midY])}).task(id:"\(width):\(state.rotation)"){image=try? await pages.image(index,width:width)}}
 }
 #endif

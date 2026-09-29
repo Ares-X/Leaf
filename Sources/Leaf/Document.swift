@@ -13,7 +13,7 @@ struct ReadingDocument{
         if (try? url.resourceValues(forKeys:[.isDirectoryKey]).isDirectory)==true{let f=URL(fileURLWithPath:url.path,isDirectory:true);return .init(url:f,content:.pages(try Pages(f,format:.comic)))}
         var format=Format.detect(url.lastPathComponent);let fh=try FileHandle(forReadingFrom:url),prefix=try fh.read(upToCount:128) ?? Data();try fh.close()
         if let sniffed=Format.sniff(prefix){format=sniffed}
-        if url.pathExtension.lowercased()=="ai",format == .pdf{format=.postscript}
+
         switch format{
         case .pdf:return .init(url:url,content:.pdf(url,nil))
         case .replica:return .init(url:url,content:.pdf(url,try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe),replica:true)))

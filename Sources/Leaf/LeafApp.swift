@@ -28,7 +28,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     func close(){persist();loading?.cancel();document=nil;busy=false;outline=[];count=0;status=""}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
-        persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;fraction=0;cfi=nil
+        persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;rotation=0;fraction=0;cfi=nil
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
             do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled else{return}
                 if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let s=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,s.page);cfi=s.cfi;fraction=s.fraction}
