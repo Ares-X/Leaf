@@ -6,7 +6,6 @@ import Darwin
 
 extension Notification.Name{static let leafAppearancePreferencesChanged=Notification.Name("LeafAppearancePreferencesChanged")}
 
-extension Notification.Name{static let leafAppearanceChanged=Notification.Name("LeafAppearanceChanged")}
 
 struct ReaderCommand:Equatable{let id=UUID();var name="",text="";var number=0.0}
 struct ContentsItem:Identifiable,Codable{var id:String{target};let title:String,target:String;var depth=0}
