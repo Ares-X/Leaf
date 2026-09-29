@@ -32,6 +32,8 @@ struct ReadingPosition:Codable{var page=0}
     @Published var theme = "system"
     @Published var rotation = 0
     @Published var reflowable = false
+    @Published var searchable = false
+    @Published var renderRevision = 0
     private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?,requestGeneration=0
     private(set) var generation=0
 
@@ -58,6 +60,7 @@ struct ReadingPosition:Codable{var page=0}
     var supportsRTL:Bool{isFixed}
     var supportsFit:Bool{isFixed}
     var supportsRotation:Bool{isFixed}
+    var supportsSearch:Bool{isText || isCHM || searchable}
     var hasDocument:Bool{document != nil}
     var canTurn:Bool{isCHM ? hasDocument:count>1}
     var canSaveCopy:Bool{document?.url.hasDirectoryPath == false}
@@ -76,12 +79,12 @@ struct ReadingPosition:Codable{var page=0}
         persist();requestGeneration+=1;let g=requestGeneration;loading?.cancel();busy=true;error=nil;status="Opening \(url.lastPathComponent)…"
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
             do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==requestGeneration else{return}
-                readPreferences(layout:true);outline=[];outlineBusy=false;page=0;count=0;zoom=1;rotation=0;reflowable=false
+                readPreferences(layout:true);outline=[];outlineBusy=false;page=0;count=0;zoom=1;rotation=0;reflowable=false;searchable=false;renderRevision=0
                 if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page)}
                 generation+=1;document=opened;busy=false;status="";watchFile(url);NSDocumentController.shared.noteNewRecentDocumentURL(url)
             }catch{if !Task.isCancelled,g==requestGeneration{self.error=error.localizedDescription;busy=false;status=""}}}
     }
-    func close(){requestGeneration+=1;generation+=1;persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];outlineBusy=false;count=0;status="";reflowable=false}
+    func close(){requestGeneration+=1;generation+=1;persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];outlineBusy=false;count=0;status="";reflowable=false;searchable=false;renderRevision=0}
     func reload(){guard let u=document?.url else{return};persist();requestGeneration+=1;let g=requestGeneration;loading?.cancel();status="Reloading…";loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==requestGeneration else{return};generation+=1;document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==requestGeneration{status="";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if isCHM{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
@@ -130,13 +133,14 @@ private extension FocusedValues{
 @MainActor private struct ReaderWindow:View{
     @Binding var payload:WindowPayload
     @StateObject private var state=ReaderState()
+    @Environment(\.openWindow) private var openWindow
     var body:some View{
         ReaderView(state:state).frame(minWidth:560,minHeight:400)
             .background(WindowTabs())
             .focusedSceneValue(\.readerState,state)
             .task(id:payload.path){if state.document==nil,let path=payload.path,FileManager.default.fileExists(atPath:path){state.open(URL(fileURLWithPath:path))}}
             .onChange(of:state.document?.url.path){payload.path=$0}
-            .onOpenURL{state.open($0)}
+            .onOpenURL{url in if state.document == nil{state.open(url)}else{openWindow(id:"reader",value:WindowPayload(path:url.path))}}
             .onReceive(NotificationCenter.default.publisher(for:UserDefaults.didChangeNotification)){_ in state.syncAppearancePreferences()}
             .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in state.persist()}
     }
@@ -162,9 +166,9 @@ private struct LeafCommands:Commands{
             Button("Close Document"){state?.close()}.disabled(state?.document==nil)
         }
         CommandGroup(after:.printItem){Button("Print…"){state?.printDocument()}.keyboardShortcut("p").disabled(state?.document==nil)}
-        CommandGroup(after:.toolbar){Button("Toggle Contents"){state?.showContents.toggle()}.keyboardShortcut("t",modifiers:[.command,.shift]);Button("Enter Full Screen"){NSApp.keyWindow?.toggleFullScreen(nil)}.keyboardShortcut("f",modifiers:[.command,.control])}
+        CommandGroup(after:.toolbar){Button("Toggle Contents"){state?.showContents.toggle()}.keyboardShortcut("t",modifiers:[.command,.shift]).disabled(state?.hasDocument != true);Button("Enter Full Screen"){NSApp.keyWindow?.toggleFullScreen(nil)}.keyboardShortcut("f",modifiers:[.command,.control])}
         CommandMenu("Reading"){
-            Button("Find…"){state?.toggleFind()}.keyboardShortcut("f").disabled(state==nil)
+            Button("Find…"){state?.toggleFind()}.keyboardShortcut("f").disabled(state?.supportsSearch != true)
             Button("Previous Page"){state?.turn(-1)}.keyboardShortcut("[").disabled(state?.canTurn != true);Button("Next Page"){state?.turn(1)}.keyboardShortcut("]").disabled(state?.canTurn != true)
             Button("Previous File"){state?.sibling(-1)}.keyboardShortcut(.upArrow,modifiers:[.command,.option]);Button("Next File"){state?.sibling(1)}.keyboardShortcut(.downArrow,modifiers:[.command,.option])
             Divider();Button("Zoom In"){if let state{state.setZoom(state.zoom*1.2)}}.keyboardShortcut("+").disabled(state?.hasDocument != true);Button("Zoom Out"){if let state{state.setZoom(state.zoom/1.2)}}.keyboardShortcut("-").disabled(state?.hasDocument != true);Button("Actual Size"){state?.setFit("actual")}.keyboardShortcut("1").disabled(state?.supportsFit != true);Button("Fit Page"){state?.setFit("page")}.keyboardShortcut("0").disabled(state?.supportsFit != true);Button("Fit Width"){state?.setFit("width")}.keyboardShortcut("2").disabled(state?.supportsFit != true)
@@ -201,7 +205,7 @@ private struct LeafCommands:Commands{
     .preferredColorScheme(state.theme=="dark" ? .dark:state.theme=="light" ? .light:nil)
     .onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread");if state.supportsSpread{state.send("spread",number:$0 ? 2:1)}}
     .onChange(of:state.rtl){UserDefaults.standard.set($0,forKey:"rtl");if state.supportsRTL{state.send("rtl",number:$0 ? 1:0)}}
-    .toolbar{Button(action:state.chooseFile){Image(systemName:"folder")}.help("Open Document");Button{state.showContents.toggle()}label:{Image(systemName:"sidebar.left")}.disabled(!state.hasDocument).help("Toggle Contents");Button{state.turn(-1)}label:{Image(systemName:"chevron.left")}.disabled(!state.canTurn).help("Previous Page");if state.hasDocument{Text(state.positionLabel).monospacedDigit()};Button{state.turn(1)}label:{Image(systemName:"chevron.right")}.disabled(!state.canTurn).help("Next Page");TextField(state.isText ? "Line":"Page",text:$destination).frame(width:55).disabled(!state.hasDocument || state.isCHM).onSubmit{state.go(destination);destination=""};Menu{if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")};Button("Actual Size"){state.setFit("actual")};Divider()};if state.supportsFlow{Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);if state.supportsRTL{Toggle("Right to Left",isOn:$state.rtl)};Divider()};if state.isText || state.isCHM || state.reflowable{TypographyMenu(state:state);Divider()};if state.supportsRotation{Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)};Divider()};Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}}label:{Image(systemName:"slider.horizontal.3")}.help("Reading Options");Button{state.setZoom(state.zoom/1.2)}label:{Image(systemName:"minus.magnifyingglass")}.disabled(!state.hasDocument).help("Zoom Out");Button{state.setZoom(state.zoom*1.2)}label:{Image(systemName:"plus.magnifyingglass")}.disabled(!state.hasDocument).help("Zoom In");Button{state.toggleFind()}label:{Image(systemName:"magnifyingglass")}.disabled(!state.hasDocument).help("Find")}
+    .toolbar{Button(action:state.chooseFile){Image(systemName:"folder")}.help("Open Document");Button{state.showContents.toggle()}label:{Image(systemName:"sidebar.left")}.disabled(!state.hasDocument).help("Toggle Contents");Button{state.turn(-1)}label:{Image(systemName:"chevron.left")}.disabled(!state.canTurn).help("Previous Page");if state.hasDocument{Text(state.positionLabel).monospacedDigit()};Button{state.turn(1)}label:{Image(systemName:"chevron.right")}.disabled(!state.canTurn).help("Next Page");TextField(state.isText ? "Line":"Page",text:$destination).frame(width:55).disabled(!state.hasDocument || state.isCHM).onSubmit{state.go(destination);destination=""};Menu{if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")};Button("Actual Size"){state.setFit("actual")};Divider()};if state.supportsFlow{Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);if state.supportsRTL{Toggle("Right to Left",isOn:$state.rtl)};Divider()};if state.isText || state.isCHM || state.reflowable{TypographyMenu(state:state);Divider()};if state.supportsRotation{Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)};Divider()};Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}}label:{Image(systemName:"slider.horizontal.3")}.help("Reading Options");Button{state.setZoom(state.zoom/1.2)}label:{Image(systemName:"minus.magnifyingglass")}.disabled(!state.hasDocument).help("Zoom Out");Button{state.setZoom(state.zoom*1.2)}label:{Image(systemName:"plus.magnifyingglass")}.disabled(!state.hasDocument).help("Zoom In");Button{state.toggleFind()}label:{Image(systemName:"magnifyingglass")}.disabled(!state.supportsSearch).help("Find")}
     .contextMenu{Button("Open…",action:state.chooseFile);if state.document != nil{Button("Show in Finder"){if let u=state.document?.url{NSWorkspace.shared.activateFileViewerSelecting([u])}};Button("Copy File Path",action:state.copyPath);Divider();Button("Previous"){state.turn(-1)};Button("Next"){state.turn(1)};if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")}}}}
     .dropDestination(for:URL.self){urls,_ in guard let first=urls.first else{return false};state.open(first);for u in urls.dropFirst(){openWindow(id:"reader",value:WindowPayload(path:u.path))};return true}
     .alert("Unable to read document",isPresented:Binding(get:{state.error != nil},set:{if !$0{state.error=nil}})){Button("OK"){state.error=nil}}message:{Text(state.error ?? "")}}
@@ -217,7 +221,7 @@ private struct LeafCommands:Commands{
     @ViewBuilder var documentArea:some View{
         Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{WelcomeView(open:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)
     }
-    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
+    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{state.searchable=await p.hasText;if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
 }
 private struct DocumentProxy:ViewModifier{
     let url:URL?
