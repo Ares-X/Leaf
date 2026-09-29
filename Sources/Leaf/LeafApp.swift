@@ -53,6 +53,7 @@ struct ReadingPosition:Codable{var page=0}
         if oldTypography != newTypography || (oldTheme != theme && (isText || isCHM)){send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}
     }
     var isText:Bool{if case .text=document?.content{return true};return false}
+    var isPDF:Bool{if case .pdf=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
     var isCHM:Bool{if case .chm=document?.content{return true};return false}
     var supportsFlow:Bool{isFixed}
@@ -60,7 +61,7 @@ struct ReadingPosition:Codable{var page=0}
     var supportsRTL:Bool{isFixed}
     var supportsFit:Bool{isFixed}
     var supportsRotation:Bool{isFixed}
-    var supportsSearch:Bool{isText || isCHM || searchable}
+    var supportsSearch:Bool{isPDF || isText || isCHM || searchable}
     var hasDocument:Bool{document != nil}
     var canTurn:Bool{isCHM ? hasDocument:count>1}
     var canSaveCopy:Bool{document?.url.hasDirectoryPath == false}
@@ -79,7 +80,7 @@ struct ReadingPosition:Codable{var page=0}
         persist();requestGeneration+=1;let g=requestGeneration;loading?.cancel();busy=true;error=nil;status="Opening \(url.lastPathComponent)…"
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
             do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==requestGeneration else{return}
-                readPreferences(layout:true);outline=[];outlineBusy=false;page=0;count=0;zoom=1;rotation=0;reflowable=false;searchable=false;renderRevision=0
+                readPreferences(layout:true);outline=[];outlineBusy=false;showFind=false;page=0;count=0;zoom=1;rotation=0;reflowable=false;searchable=false;renderRevision=0
                 if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page)}
                 generation+=1;document=opened;busy=false;status="";watchFile(url);NSDocumentController.shared.noteNewRecentDocumentURL(url)
             }catch{if !Task.isCancelled,g==requestGeneration{self.error=error.localizedDescription;busy=false;status=""}}}
