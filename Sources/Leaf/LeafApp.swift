@@ -25,6 +25,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     }
     var isBook:Bool{if case .book=document?.content{return true};return false}
     var isText:Bool{if case .text=document?.content{return true};return false}
+    var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
     var positionLabel:String{isBook ? "\(Int(fraction*100))%" : "\(min(page+1,count)) / \(count)"}
     func send(_ name:String,text:String="",number:Double=0){command=.init(name:name,text:text,number:number)}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
@@ -83,10 +84,10 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
                 Button("Find…"){state.showFind.toggle()}.keyboardShortcut("f")
                 Button("Previous Page"){state.turn(-1)}.keyboardShortcut("[");Button("Next Page"){state.turn(1)}.keyboardShortcut("]")
                 Button("Previous File"){state.sibling(-1)}.keyboardShortcut(.upArrow,modifiers:[.command,.option]);Button("Next File"){state.sibling(1)}.keyboardShortcut(.downArrow,modifiers:[.command,.option])
-                Divider();Button("Zoom In"){state.setZoom(state.zoom*1.2)}.keyboardShortcut("+");Button("Zoom Out"){state.setZoom(state.zoom/1.2)}.keyboardShortcut("-");Button("Actual Size"){state.setFit("actual")}.keyboardShortcut("1");Button("Fit Page"){state.setFit("page")}.keyboardShortcut("0");Button("Fit Width"){state.setFit("width")}.keyboardShortcut("2")
+                Divider();Button("Zoom In"){state.setZoom(state.zoom*1.2)}.keyboardShortcut("+");Button("Zoom Out"){state.setZoom(state.zoom/1.2)}.keyboardShortcut("-");Button("Actual Size"){state.setFit("actual")}.keyboardShortcut("1").disabled(!state.isFixed);Button("Fit Page"){state.setFit("page")}.keyboardShortcut("0").disabled(!state.isFixed);Button("Fit Width"){state.setFit("width")}.keyboardShortcut("2").disabled(!state.isFixed)
                 Divider();Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);Toggle("Right to Left",isOn:$state.rtl)
                 Divider();Button("Bookmark This Position",action:state.bookmark).keyboardShortcut("d");Button("Go to Bookmark",action:state.restoreBookmark);Button("Contents"){state.showContents.toggle()}
-                Divider();Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)}
+                Divider();Button("Rotate Left"){state.rotate(-90)}.disabled(!state.isFixed);Button("Rotate Right"){state.rotate(90)}.disabled(!state.isFixed)
                 Divider();Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}
             }
         }

@@ -21,11 +21,11 @@ API Document *lf_open(const char *path, char *error) {
         if (status == JXL_DEC_BASIC_INFO) {
             JxlBasicInfo info;
             if (JxlDecoderGetBasicInfo(decoder, &info) != JXL_DEC_SUCCESS) break;
-            d->width = (int)info.xsize; d->height = (int)info.ysize;
+            if(!info.xsize||!info.ysize||info.xsize>INT_MAX||info.ysize>INT_MAX){snprintf(error,512,"JPEG XL dimensions are too large");break;}d->width=(int)info.xsize;d->height=(int)info.ysize;
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
             size_t n;
             if (JxlDecoderImageOutBufferSize(decoder, &format, &n) != JXL_DEC_SUCCESS) break;
-            d->pixels = malloc(n);
+            if(n>512u*1024u*1024u){snprintf(error,512,"JPEG XL image is too large");break;}d->pixels=malloc(n);
             if (!d->pixels || JxlDecoderSetImageOutBuffer(decoder, &format, d->pixels, n) != JXL_DEC_SUCCESS) break;
         } else if (status == JXL_DEC_FULL_IMAGE) { ok = 1; break; }
         else if (status == JXL_DEC_ERROR || status == JXL_DEC_NEED_MORE_INPUT || status == JXL_DEC_SUCCESS) break;

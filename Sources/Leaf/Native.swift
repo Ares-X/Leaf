@@ -11,7 +11,7 @@ final class NativeFile {
     typealias Render = @convention(c) (UnsafeMutableRawPointer, Int32, Int32, UnsafeMutablePointer<Int32>, UnsafeMutablePointer<CChar>) -> UnsafeMutableRawPointer?
     let library: UnsafeMutableRawPointer
     let document: UnsafeMutableRawPointer
-    private let closeDocument:Close,render:Render
+    private let closeDocument:Close,render:Render?
     private let textFn:UnsafeMutableRawPointer?,pathFn:UnsafeMutableRawPointer?,readFn:UnsafeMutableRawPointer?
     let count:Int
 
@@ -34,7 +34,7 @@ final class NativeFile {
             guard let document = open(url.path, &error) else { throw ReadError(String(cString: error).isEmpty ? "Cannot decode this file" : String(cString: error)) }
             let count = Int(pageCount(document))
             guard count > 0 else { close(document); throw ReadError("Document has no readable content") }
-            self.library=library;self.document=document;self.closeDocument=close;self.render=try symbol("lf_render",Render.self);self.textFn=dlsym(library,"lf_text");self.pathFn=dlsym(library,"lf_path");self.readFn=dlsym(library,"lf_read");self.count=count
+            self.library=library;self.document=document;self.closeDocument=close;self.render=dlsym(library,"lf_render").map{unsafeBitCast($0,to:Render.self)};self.textFn=dlsym(library,"lf_text");self.pathFn=dlsym(library,"lf_path");self.readFn=dlsym(library,"lf_read");self.count=count
         } catch { dlclose(library); throw error }
     }
     deinit { closeDocument(document); dlclose(library) }
@@ -44,7 +44,7 @@ final class NativeFile {
     }
     func image(_ page: Int, width: Int) throws -> CGImage {
         var info = [Int32](repeating: 0, count: 4), error = [CChar](repeating: 0, count: 512)
-        guard let p = render(document, Int32(page), Int32(width), &info, &error) else {
+        guard let render else{throw ReadError("This engine cannot render pages")};guard let p=render(document,Int32(page),Int32(width),&info,&error) else{
             throw ReadError(String(cString: error).isEmpty ? "Cannot render page" : String(cString: error))
         }
         let w = Int(info[0]), h = Int(info[1]), stride = Int(info[2]), channels = Int(info[3])
