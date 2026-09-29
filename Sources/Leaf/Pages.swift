@@ -28,7 +28,7 @@ actor Pages{
     @State private var playing=false
     @State private var pinchStart:Double?
     @State private var scale:CGFloat=2
-    @State private var searchTask:Task<Void,Never>?
+    @State private var searchGeneration=0
 
     var body:some View{
         GeometryReader{g in
@@ -59,7 +59,7 @@ actor Pages{
         .task{isAnimation=await pages.frameDelay(0) != nil;playing=isAnimation}
         .task(id:playing){while playing,!Task.isCancelled,let delay=await pages.frameDelay(state.page){do{try await Task.sleep(nanoseconds:UInt64(delay*1_000_000_000))}catch{return};guard !Task.isCancelled else{return};state.page=(state.page+1)%max(1,state.count)}}
         .onChange(of:state.command.id){_ in handleCommand()}
-        .onDisappear{searchTask?.cancel()}
+        .onDisappear{searchGeneration += 1}
     }
 
     @ViewBuilder func continuous(target:Int)->some View{
@@ -109,8 +109,8 @@ actor Pages{
         if state.command.name=="print"{
             Task{if let image=try? await pages.image(state.page,width:2400){let v=NSImageView();v.image=NSImage(cgImage:image,size:.zero);v.imageScaling = .scaleProportionallyUpOrDown;v.frame=NSRect(x:0,y:0,width:612,height:792);NSPrintOperation(view:v).run()}}
         }else if state.command.name=="find"{
-            searchTask?.cancel();let q=state.command.text,p=state.page,id=state.command.id
-            searchTask=Task{let m=await pages.find(q,after:p);guard !Task.isCancelled,state.command.id==id,case .pages(let a)? = state.document?.content,a===pages else{return};if let m{state.page=m;state.send("page",number:Double(m));state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}
+            searchGeneration += 1;let generation=searchGeneration,q=state.command.text,p=state.page,id=state.command.id
+            Task{let m=await pages.find(q,after:p);guard generation==searchGeneration,state.command.id==id,case .pages(let a)? = state.document?.content,a===pages else{return};if let m{state.page=m;state.send("page",number:Double(m));state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}
         }
     }
 
