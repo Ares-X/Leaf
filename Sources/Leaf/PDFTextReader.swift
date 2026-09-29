@@ -33,19 +33,19 @@ import PDFKit
     @ObservedObject var state:ReaderState;let text:String
     func makeCoordinator()->Coordinator{Coordinator(state)}
     func makeNSView(context:Context)->NSScrollView{
-        let scroll=NSTextView.scrollableTextView(),view=scroll.documentView as! NSTextView,c=context.coordinator
-        view.isEditable=false;view.isSelectable=true;view.usesFindBar=true;view.string=text;c.view=view
+        let content=text,scroll=NSTextView.scrollableTextView(),view=scroll.documentView as! NSTextView,c=context.coordinator
+        view.isEditable=false;view.isSelectable=true;view.usesFindBar=true;view.string=content;c.view=view
         scroll.contentView.postsBoundsChangedNotifications=true
         NotificationCenter.default.addObserver(c,selector:#selector(Coordinator.scrolled),name:NSView.boundsDidChangeNotification,object:scroll.contentView)
         c.style(force:true);state.outlineBusy=true
         Task{@MainActor in
             let scan=await Task.detached(priority:.utility){
-                var lines=[0];lines.reserveCapacity(max(1,text.count/80))
-                for (i,x) in text.utf16.enumerated() where x==10{lines.append(i+1)}
-                return (lines,ChapterDetector.detect(text))
+                var lines=[0];lines.reserveCapacity(max(1,content.utf16.count/80))
+                for (i,x) in content.utf16.enumerated() where x==10{if Task.isCancelled{return(lines,[])};lines.append(i+1)}
+                return (lines,ChapterDetector.detect(content))
             }.value
             guard c.active else{return}
-            c.lines=scan.0;state.count=scan.0.count;c.go(state.page)
+            c.lines=scan.0;c.indexed=true;state.count=scan.0.count;c.go(state.page)
             state.outline=scan.1.map{.init(title:$0.title,target:String($0.line),depth:$0.depth)}
             state.outlineBusy=false
         }
