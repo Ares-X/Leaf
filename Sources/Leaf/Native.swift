@@ -38,10 +38,6 @@ final class NativeFile {
         } catch { dlclose(library); throw error }
     }
     deinit { closeDocument(document); dlclose(library) }
-    func symbol<T>(_ name: String, _: T.Type) throws -> T {
-        guard let p = dlsym(library, name) else { throw ReadError("This engine does not provide \(name)") }
-        return unsafeBitCast(p, to: T.self)
-    }
     func image(_ page: Int, width: Int) throws -> CGImage {
         var info = [Int32](repeating: 0, count: 4), error = [CChar](repeating: 0, count: 512)
         guard let render else{throw ReadError("This engine cannot render pages")};guard let p=render(document,Int32(page),Int32(width),&info,&error) else{
