@@ -44,15 +44,14 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
         spread=d.bool(forKey:"spread");rtl=d.bool(forKey:"rtl")
         if let p=d.string(forKey:"lastDocument"),FileManager.default.fileExists(atPath:p){restoreTask=Task{try? await Task.sleep(nanoseconds:300_000_000);guard !Task.isCancelled,document==nil,!busy else{return};open(URL(fileURLWithPath:p))}}
     }
-    var isBook:Bool{false}
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
     var supportsFlow:Bool{document != nil && !isText}
     var supportsSpread:Bool{supportsFlow}
-    var supportsRTL:Bool{isBook || isFixed}
+    var supportsRTL:Bool{document != nil && !isText}
     var supportsFit:Bool{isFixed}
     var supportsRotation:Bool{isFixed}
-    var positionLabel:String{isBook ? "\(Int(fraction*100))%" : "\(min(page+1,count)) / \(count)"}
+    var positionLabel:String{"\(min(page+1,count)) / \(count)"}
     func send(_ name:String,text:String="",number:Double=0){command = .init(name:name,text:text,number:number)}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
@@ -66,8 +65,8 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     func close(){generation+=1;restoreTask?.cancel();persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];searchResults=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
     func reload(){guard let u=document?.url else{return};persist();generation+=1;let g=generation;loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==generation{status="Reload failed";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page,cfi:cfi,fraction:fraction))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
-    func turn(_ d:Int){if isBook{send(d>0 ? "next":"prev")}else{page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}}
-    func go(_ s:String){guard let n=Double(s),n.isFinite else{return};if isBook{send("fraction",number:max(0,min(1,n/100)))}else{page=Int(max(0,min(Double(max(0,count-1)),n-1)));send("page",number:Double(page));persist()}}
+    func turn(_ d:Int){if case .chm=document?.content{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
+    func go(_ s:String){guard let n=Double(s),n.isFinite else{return};page=Int(max(0,min(Double(max(0,count-1)),n-1)));send("page",number:Double(page));persist()}
     func sibling(_ delta:Int){guard let u=document?.url,let files=try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])else{return};let list=files.filter{Format.detect($0.lastPathComponent) != .unknown}.sorted{$0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)== .orderedAscending};guard let i=list.firstIndex(of:u),list.indices.contains(i+delta)else{return};open(list[i+delta])}
     func saveCopy(){
         guard let u=document?.url,!u.hasDirectoryPath else{error="Save a Copy is only available for files.";return}
@@ -96,7 +95,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");applyTypography()}
     func rotate(_ d:Int){guard supportsRotation else{return};rotation=(rotation+d+360)%360;send("rotate",number:Double(d))}
     func bookmark(){guard let u=document?.url else{return};persist();UserDefaults.standard.set(UserDefaults.standard.data(forKey:"position:"+u.standardizedFileURL.path),forKey:"bookmark:"+u.standardizedFileURL.path);status="Bookmark saved"}
-    func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};if isBook,let c=p.cfi{send("href",text:c)}else{go(String(p.page+1))}}
+    func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};go(String(p.page+1))}
 }
 
 @main @MainActor struct LeafApp:App{
@@ -146,7 +145,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     }.navigationTitle(state.document?.url.lastPathComponent ?? "Leaf")
     .onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread");if state.supportsSpread{state.send("spread",number:$0 ? 2:1)}}
     .onChange(of:state.rtl){UserDefaults.standard.set($0,forKey:"rtl");if state.supportsRTL{state.send("rtl",number:$0 ? 1:0)}}
-    .toolbar{Button(action:state.chooseFile){Image(systemName:"folder")}.help("Open");Button{state.showContents.toggle()}label:{Image(systemName:"sidebar.left")};Button{state.turn(-1)}label:{Image(systemName:"chevron.left")};Text(state.positionLabel).monospacedDigit();Button{state.turn(1)}label:{Image(systemName:"chevron.right")};TextField(state.isBook ? "Go to %":state.isText ? "Line":"Page",text:$destination).frame(width:55).onSubmit{state.go(destination);destination=""};Menu{if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")};Button("Actual Size"){state.setFit("actual")};Divider()};if state.supportsFlow{Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);if state.supportsRTL{Toggle("Right to Left",isOn:$state.rtl)};Divider()};if state.isBook||state.isText{TypographyMenu(state:state);Divider()};if state.supportsRotation{Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)};Divider()};Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}}label:{Image(systemName:"textformat.size")};Button{state.setZoom(state.zoom/1.2)}label:{Image(systemName:"minus.magnifyingglass")};Button{state.setZoom(state.zoom*1.2)}label:{Image(systemName:"plus.magnifyingglass")};Button{state.showFind.toggle()}label:{Image(systemName:"magnifyingglass")}}
+    .toolbar{Button(action:state.chooseFile){Image(systemName:"folder")}.help("Open");Button{state.showContents.toggle()}label:{Image(systemName:"sidebar.left")};Button{state.turn(-1)}label:{Image(systemName:"chevron.left")};Text(state.positionLabel).monospacedDigit();Button{state.turn(1)}label:{Image(systemName:"chevron.right")};TextField(state.isText ? "Line":"Page",text:$destination).frame(width:55).onSubmit{state.go(destination);destination=""};Menu{if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")};Button("Actual Size"){state.setFit("actual")};Divider()};if state.supportsFlow{Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);if state.supportsRTL{Toggle("Right to Left",isOn:$state.rtl)};Divider()};if state.isText{TypographyMenu(state:state);Divider()};if state.supportsRotation{Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)};Divider()};Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}}label:{Image(systemName:"textformat.size")};Button{state.setZoom(state.zoom/1.2)}label:{Image(systemName:"minus.magnifyingglass")};Button{state.setZoom(state.zoom*1.2)}label:{Image(systemName:"plus.magnifyingglass")};Button{state.showFind.toggle()}label:{Image(systemName:"magnifyingglass")}}
     .contextMenu{Button("Open…",action:state.chooseFile);if state.document != nil{Button("Show in Finder"){if let u=state.document?.url{NSWorkspace.shared.activateFileViewerSelecting([u])}};Button("Copy File Path",action:state.copyPath);Divider();Button("Previous"){state.turn(-1)};Button("Next"){state.turn(1)};if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")}}}}
     .onDrop(of:[.fileURL],isTargeted:nil){items in guard let item=items.first else{return false};_=item.loadObject(ofClass:URL.self){u,_ in if let u{Task{@MainActor in state.open(u)}}};return true}
     .alert("Unable to read document",isPresented:Binding(get:{state.error != nil},set:{if !$0{state.error=nil}})){Button("OK"){state.error=nil}}message:{Text(state.error ?? "")}}
