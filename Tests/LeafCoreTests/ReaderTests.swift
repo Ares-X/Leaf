@@ -13,6 +13,7 @@ final class ReaderTests:XCTestCase{
         XCTAssertEqual(try LegacyText.unpackPalm([97,98,99,128,24]),Array("abcabc".utf8))
         func palm(_ payload:Data)->Data{var b=Data(repeating:0,count:110);func put(_ n:Int,_ p:Int,_ z:Int){for i in 0..<z{b[p+i]=UInt8(truncatingIfNeeded:n>>(8*(z-i-1)))}};b.replaceSubrange(60..<68,with:Data("TEXtREAd".utf8));put(2,76,2);put(94,78,4);put(110,86,4);put(1,94,2);put(payload.count,98,4);put(1,102,2);b.append(payload);return b}
         XCTAssertEqual(try LegacyText.palm(palm(Data("read me".utf8))),Data("read me".utf8))
+        var unsupported=palm(Data("x".utf8));unsupported.replaceSubrange(60..<68,with:Data("DataPlkr".utf8));XCTAssertThrowsError(try LegacyText.palm(unsupported))
         let pdf=Data("%PDF-1.4\nexact\n%%EOF".utf8)
         var mop=Data("%MOP".utf8);for n in [1,1,20,pdf.count]{var x=UInt32(n).bigEndian;withUnsafeBytes(of:&x){mop.append(contentsOf:$0)}};mop.append(pdf)
         XCTAssertEqual(try LegacyText.palm(palm(mop),replica:true),pdf)
