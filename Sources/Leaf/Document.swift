@@ -24,8 +24,11 @@ struct ReadingDocument{
         switch format{
         case .pdf:guard PDFDocument(url:url) != nil else{throw ReadError("Cannot read PDF: \(url.lastPathComponent)")};return .init(url:url,content:.pdf(url,nil))
         case .replica:return .init(url:url,content:.pdf(url,try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe),replica:true)))
-        case .text,.palm,.tcr:
-            var d=try Data(contentsOf:url,options:.mappedIfSafe);if format == .palm{d=try LegacyText.palm(d)};if format == .tcr{d=try LegacyText.tcr(d)};return .init(url:url,content:.text(decode(d)))
+        case .text:return .init(url:url,content:.text(decode(try Data(contentsOf:url,options:.mappedIfSafe))))
+        case .palm:
+            do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
+            catch{return .init(url:url,content:.text(decode(try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe)))))}
+        case .tcr:return .init(url:url,content:.text(decode(try LegacyText.tcr(Data(contentsOf:url,options:.mappedIfSafe))))
         case .book,.markdown:
             do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
             catch{return .init(url:url,content:.book(try BookSource(url,format:format)))}
