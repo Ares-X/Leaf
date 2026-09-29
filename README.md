@@ -81,23 +81,20 @@ open dist/Leaf.app
 
 The first build checks out pinned Foliate and MuPDF revisions, builds the selective MuPDF library, and bundles only linked decoder dylibs. Later builds reuse downloads and incremental outputs.
 Homebrew library versions/build receipts are recorded in the bundle; those
-three dependencies are not fully pinned yet. The result is a local ad-hoc signed
-bundle, **not a notarized or redistribution-audited release**. A public binary
+three dependencies are not fully pinned yet. The result is a local ad-hoc signed bundle. The build script runs portable tests, validates Info.plist and icon output, then performs a strict deep code-signature verification. It is **not a notarized or redistribution-audited release**. A public binary
 release must also supply the corresponding dependency sources and license notices.
 
 ```sh
 ./scripts/build-app.sh --core  # omit MuPDF/DjVu/CHM/JXL; fewer formats, not full parity
 ./scripts/run-dev.sh           # prepare JS resources, then swift run
-swift test                    # three focused portable core checks; also works on Linux
+swift test                    # portable core routing/archive/legacy/chapter checks; also works on Linux
 ```
 
 Optional PostScript: `brew install ghostscript`.
 
 ## Verification in this change
 
-- Linux / Swift 6.2.1: portable build and three XCTest cases passed: actual
-  Deflate/ZIP64 entry reads/natural ordering, Palm/TCR/Print Replica byte handling,
-  and compound-extension routing.
+- Portable XCTest coverage includes libarchive/ZIP64 reads and rewind, path safety, ZIP subtype routing, format/signature routing, Palm/TCR/Print Replica handling, and multilingual TXT chapter detection.
 - C MuPDF bridge: compiled and executed on Linux against the available MuPDF
   1.26.12; SVG rasterization and extracted text checked.
 - macOS-target Swift **syntax parsing only**, JavaScript syntax and shell/Python syntax checked.
