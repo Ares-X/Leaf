@@ -78,8 +78,12 @@ if tool.exists():
     for line in run('otool','-L',tool).splitlines()[1:]:
         dependency=line.strip().split(' (compatibility')[0]
         if dependency in ident or dependency.startswith(('/usr/lib/','/System/Library/')): continue
-        resolved=Path(dependency)
-        if not resolved.is_file(): raise RuntimeError(f'Cannot resolve helper dependency {dependency}')
+        if dependency.startswith('@loader_path/'): resolved=tool.parent/dependency[len('@loader_path/'):]
+        elif dependency.startswith('@rpath/'):
+            rpaths=re.findall(r'cmd LC_RPATH\n.*?\n\s*path (.+?) \(offset',run('otool','-l',tool))
+            resolved=next((Path(x.replace('@loader_path',str(tool.parent)))/dependency[len('@rpath/'):] for x in rpaths if (Path(x.replace('@loader_path',str(tool.parent)))/dependency[len('@rpath/'):]).exists()),None)
+        else: resolved=Path(dependency)
+        if resolved is None or not resolved.is_file(): raise RuntimeError(f'Cannot resolve helper dependency {dependency}')
         child=bundle(resolved)
         subprocess.check_call(['install_name_tool','-change',dependency,'@loader_path/../../Frameworks/'+child.name,str(tool)])
     subprocess.check_call(['codesign','--force','--sign','-',str(tool)])
