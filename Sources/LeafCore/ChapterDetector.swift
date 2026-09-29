@@ -42,7 +42,7 @@ public enum ChapterDetector{
     private static func endsLikeProse(_ s:String)->Bool{"。！？!?；;，,".contains(s.last ?? " ")}
     private static func depth(_ s:String)->Int{
         let x=s.lowercased()
-        if x.hasPrefix("第") && (x.contains("卷") || x.contains("部")) || x.hasPrefix("part ") || x.hasPrefix("book "){return 0}
+        if ["卷","部","篇","集"].contains(where:x.hasPrefix) || x.hasPrefix("第") && (x.contains("卷") || x.contains("部")) || x.hasPrefix("part ") || x.hasPrefix("book "){return 0}
         return 1
     }
 }
