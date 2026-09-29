@@ -2,6 +2,17 @@
 #include <mupdf/fitz.h>
 
 typedef struct { fz_context *ctx; fz_document *doc; } Document;
+API int lf_reflow(Document *d) { return fz_is_document_reflowable(d->ctx, d->doc); }
+API void lf_layout(Document *d, float width, float height, float em) {
+    if (!d || !fz_is_document_reflowable(d->ctx, d->doc)) return;
+    fz_try(d->ctx) { fz_layout_document(d->ctx, d->doc, width, height, em); }
+    fz_catch(d->ctx) { }
+}
+API void lf_style(Document *d, const char *css) {
+    if (!d || !fz_is_document_reflowable(d->ctx, d->doc)) return;
+    fz_try(d->ctx) { fz_style_document(d->ctx, d->doc, 1, css ? css : ""); }
+    fz_catch(d->ctx) { }
+}
 API void lf_close(Document *d) {
     if (!d) return;
     fz_drop_document(d->ctx, d->doc); fz_drop_context(d->ctx); free(d);
