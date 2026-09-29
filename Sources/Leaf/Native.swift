@@ -11,8 +11,9 @@ final class NativeFile {
     typealias Render = @convention(c) (UnsafeMutableRawPointer, Int32, Int32, UnsafeMutablePointer<Int32>, UnsafeMutablePointer<CChar>) -> UnsafeMutableRawPointer?
     let library: UnsafeMutableRawPointer
     let document: UnsafeMutableRawPointer
-    private let closeDocument: Close
-    let count: Int
+    private let closeDocument:Close,render:Render
+    private let textFn:UnsafeMutableRawPointer?,pathFn:UnsafeMutableRawPointer?,readFn:UnsafeMutableRawPointer?
+    let count:Int
 
     init(_ url: URL, engine: String) throws {
         let candidates = [Bundle.main.privateFrameworksURL, URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/engines")].compactMap { $0?.appendingPathComponent(engine + ".dylib").path }
@@ -33,7 +34,7 @@ final class NativeFile {
             guard let document = open(url.path, &error) else { throw ReadError(String(cString: error).isEmpty ? "Cannot decode this file" : String(cString: error)) }
             let count = Int(pageCount(document))
             guard count > 0 else { close(document); throw ReadError("Document has no readable content") }
-            self.library = library; self.document = document; self.closeDocument = close; self.count = count
+            self.library=library;self.document=document;self.closeDocument=close;self.render=try symbol("lf_render",Render.self);self.textFn=dlsym(library,"lf_text");self.pathFn=dlsym(library,"lf_path");self.readFn=dlsym(library,"lf_read");self.count=count
         } catch { dlclose(library); throw error }
     }
     deinit { closeDocument(document); dlclose(library) }
@@ -42,7 +43,6 @@ final class NativeFile {
         return unsafeBitCast(p, to: T.self)
     }
     func image(_ page: Int, width: Int) throws -> CGImage {
-        let render = try symbol("lf_render", Render.self)
         var info = [Int32](repeating: 0, count: 4), error = [CChar](repeating: 0, count: 512)
         guard let p = render(document, Int32(page), Int32(width), &info, &error) else {
             throw ReadError(String(cString: error).isEmpty ? "Cannot render page" : String(cString: error))
@@ -60,22 +60,22 @@ final class NativeFile {
         }
         return image
     }
-    var hasText: Bool { dlsym(library, "lf_text") != nil }
+    var hasText:Bool{textFn != nil}
     func text(_ page: Int) -> String? {
         typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32) -> UnsafeMutablePointer<CChar>?
-        guard let get = try? symbol("lf_text", Get.self), let p = get(document, Int32(page)) else { return nil }
+        guard let fn=textFn else{return nil};let get=unsafeBitCast(fn,to:Get.self);guard let p=get(document,Int32(page)) else{return nil}
         defer { free(p) }; return String(cString: p)
     }
     func path(_ index: Int) throws -> String {
         typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32) -> UnsafePointer<CChar>?
-        guard let p = try symbol("lf_path", Get.self)(document, Int32(index)) else { throw ReadError("Missing CHM entry") }
+        guard let fn=pathFn else{throw ReadError("Missing CHM path API")};let get=unsafeBitCast(fn,to:Get.self);guard let p=get(document,Int32(index)) else{throw ReadError("Missing CHM entry")}
         return String(cString: p)
     }
     func data(_ index: Int) throws -> Data {
         typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32, UnsafeMutablePointer<Int>) -> UnsafeMutableRawPointer?
         var size = 0
-        guard let p = try symbol("lf_read", Get.self)(document, Int32(index), &size) else { throw ReadError("Cannot read CHM entry") }
-        return Data(bytesNoCopy: p, count: size, deallocator: .free)
+        guard let fn=readFn else{throw ReadError("Missing CHM read API")};let get=unsafeBitCast(fn,to:Get.self);guard let p=get(document,Int32(index),&size) else{throw ReadError("Cannot read CHM entry")};guard size>=0,size<=512*1024*1024 else{free(p);throw ReadError("CHM entry is too large")}
+        return Data(bytesNoCopy:p,count:size,deallocator:.free)
     }
 }
 #endif

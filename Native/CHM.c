@@ -28,9 +28,10 @@ API const char *lf_path(Document *d, int i) { return i >= 0 && i < d->count ? d-
 API unsigned char *lf_read(Document *d, int i, size_t *size) {
     if (i < 0 || i >= d->count) return NULL;
     struct chmUnitInfo *item = &d->items[i];
-    *size = (size_t)item->length;
-    unsigned char *out = malloc(*size ? *size : 1);
-    if (!out) return NULL;
+    if(item->length<0 || (uint64_t)item->length>512u*1024u*1024u)return NULL;
+    *size=(size_t)item->length;
+    unsigned char *out=malloc(*size ? *size:1);
+    if(!out)return NULL;
     if (chm_retrieve_object(d->file, item, out, 0, *size) != (LONGINT64)*size) { free(out); return NULL; }
     return out;
 }
