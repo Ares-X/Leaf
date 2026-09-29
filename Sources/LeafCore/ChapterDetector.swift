@@ -10,13 +10,13 @@ public struct DetectedChapter:Sendable,Equatable{
 /// Lightweight novel TOC detection: structural patterns + line shape + document consistency.
 /// It deliberately avoids language models and large rule engines so opening text stays cheap.
 public enum ChapterDetector{
+    private static let number="〇零一二三四五六七八九十百千万两壹贰叁肆伍陆柒捌玖拾佰仟0-9０-９"
     private static let patterns:[NSRegularExpression]=[
-        try! .init(pattern:#"^\s*第\s*[〇零一二三四五六七八九十百千万两0-9０-９]+\s*[章节回卷部篇集话話]\b.*$"#,options:.caseInsensitive),
-        try! .init(pattern:#"^\s*[卷部篇集]\s*[〇零一二三四五六七八九十百千万两0-9０-９]+(?:\s+.*)?$"#,options:.caseInsensitive),
-        try! .init(pattern:#"^\s*(?:序章|序言|前言|楔子|引子|终章|終章|尾声|尾聲|后记|後記|番外(?:[〇零一二三四五六七八九十百千万两0-9０-９]+)?)(?:\s+.*)?$"#,options:.caseInsensitive),
+        try! .init(pattern:"^\\s*第\\s*["+number+"]+\\s*[章节回卷部篇集节话話](?:\\s*[-—:：]?\\s*.*)?$",options:.caseInsensitive),
+        try! .init(pattern:"^\\s*[卷部篇集]\\s*["+number+"]+(?:\\s+.*)?$",options:.caseInsensitive),
+        try! .init(pattern:"^\\s*(?:序章|序言|前言|楔子|引子|终章|終章|尾声|尾聲|后记|後記|番外(?:["+number+"]+)?|プロローグ|エピローグ)(?:\\s+.*)?$",options:.caseInsensitive),
         try! .init(pattern:#"^\s*(?:chapter|part|book)\s+(?:[0-9]+|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten)(?:\b.*)?$"#,options:.caseInsensitive),
-        try! .init(pattern:#"^\s*(?:prologue|epilogue|introduction|preface|appendix)(?:\b.*)?$"#,options:.caseInsensitive),
-        try! .init(pattern:#"^\s*(?:第\s*[〇零一二三四五六七八九十百千万两0-9０-９]+\s*[章話话]|序章|終章|终章|プロローグ|エピローグ)(?:\s+.*)?$"#,options:.caseInsensitive)
+        try! .init(pattern:#"^\s*(?:prologue|epilogue|introduction|preface|appendix)(?:\b.*)?$"#,options:.caseInsensitive)
     ]
 
     public static func detect(_ text:String)->[DetectedChapter]{
@@ -34,11 +34,9 @@ public enum ChapterDetector{
         guard !candidates.isEmpty else{return[]}
         var families:[Int:Int]=[:]
         for c in candidates{families[c.2/3,default:0]+=1}
-        return candidates.compactMap{line,title,score in
-            let family=score/3,isolation=score%3,count=families[family] ?? 0
-            guard count>=2 || isolation==2 else{return nil}
-            return DetectedChapter(title:title,line:line,depth:depth(title))
-        }
+        let accepted=candidates.filter{let family=$0.2/3,isolation=$0.2%3;return (families[family] ?? 0)>=2 || isolation==2}
+        let grouped=accepted.contains{depth($0.1)==0}
+        return accepted.map{line,title,_ in DetectedChapter(title:title,line:line,depth:grouped ? depth(title):0)}
     }
 
     private static func endsLikeProse(_ s:String)->Bool{"。！？!?；;，,".contains(s.last ?? " ")}
