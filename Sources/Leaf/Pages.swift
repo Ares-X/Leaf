@@ -111,7 +111,7 @@ actor Pages{
         if state.command.name=="print"{
             Task{if let image=try? await pages.image(state.page,width:2400){let v=NSImageView();v.image=NSImage(cgImage:image,size:.zero);v.imageScaling = .scaleProportionallyUpOrDown;v.frame=NSRect(x:0,y:0,width:612,height:792);NSPrintOperation(view:v).run()}}
         }else if state.command.name=="style"{
-            Task{if let n=await pages.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font,theme:state.theme){state.count=n;state.page=min(state.page,max(0,n-1));state.renderRevision += 1;state.send("page",number:Double(state.page))}}
+            Task{if let n=await pages.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font,theme:state.resolvedTheme){state.count=n;state.page=min(state.page,max(0,n-1));state.renderRevision += 1;state.send("page",number:Double(state.page))}}
         }else if state.command.name=="find"{
             searchGeneration += 1;let generation=searchGeneration,q=state.command.text,p=state.page,id=state.command.id
             Task{let m=await pages.find(q,after:p);guard generation==searchGeneration,state.command.id==id,case .pages(let a)? = state.document?.content,a===pages else{return};if let m{state.page=m;state.send("page",number:Double(m));state.persist()}else{state.status="No matching text (image-only pages have no searchable text)"}}
