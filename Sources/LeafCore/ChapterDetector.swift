@@ -20,7 +20,7 @@ public enum ChapterDetector{
     ]
 
     public static func detect(_ text:String)->[DetectedChapter]{
-        let lines=text.components(separatedBy:.newlines)
+        let lines=text.split(separator:"\n",omittingEmptySubsequences:false)
         var candidates:[(Int,String,Int)]=[]
         for (i,raw) in lines.enumerated(){
             if Task.isCancelled{return[]}
