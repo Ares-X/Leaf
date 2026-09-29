@@ -197,6 +197,7 @@ private struct LeafCommands:Commands{
         mainArea
         if state.document != nil{Divider();HStack{Text(state.status.isEmpty ? (state.document?.url.lastPathComponent ?? ""):state.status).lineLimit(1);Spacer();if state.count>0{Text(state.positionLabel).monospacedDigit()};Text(state.zoomLabel).monospacedDigit()}.font(.caption).foregroundStyle(.secondary).padding(.horizontal,8).padding(.vertical,4)}
     }.navigationTitle(state.document?.url.lastPathComponent ?? "Leaf")
+    .modifier(DocumentProxy(url:state.document?.url))
     .preferredColorScheme(state.theme=="dark" ? .dark:state.theme=="light" ? .light:nil)
     .onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread");if state.supportsSpread{state.send("spread",number:$0 ? 2:1)}}
     .onChange(of:state.rtl){UserDefaults.standard.set($0,forKey:"rtl");if state.supportsRTL{state.send("rtl",number:$0 ? 1:0)}}
@@ -217,6 +218,10 @@ private struct LeafCommands:Commands{
         Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{WelcomeView(open:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)
     }
     @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
+}
+private struct DocumentProxy:ViewModifier{
+    let url:URL?
+    @ViewBuilder func body(content:Content)->some View{if let url{content.navigationDocument(url)}else{content}}
 }
 private struct WelcomeView:View{
     let open:()->Void
