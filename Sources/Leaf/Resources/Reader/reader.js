@@ -78,6 +78,11 @@ const htmlBook = async (meta, markdown = false) => {
 const view = document.createElement('foliate-view')
 document.body.append(view)
 let searchID = 0, query = '', hits = [], selected = -1
+const style = value => {
+    const [family='system', size='17', line='1.6', margin='32'] = String(value || '').split('|')
+    const font = family === 'system' ? '-apple-system,BlinkMacSystemFont,sans-serif' : family
+    view.renderer?.setStyles?.(`body{font-family:${font}!important;font-size:${size}px!important;line-height:${line}!important;padding-inline:${margin}px!important}img,svg{max-width:100%;height:auto}`)
+}
 window.leafCommand = async command => {
     try {
         switch (command.name) {
@@ -85,10 +90,14 @@ window.leafCommand = async command => {
         case 'prev': await view.prev(); break
         case 'href': await view.goTo(command.text); break
         case 'fraction': await view.goToFraction(command.number); break
-        case 'zoom': view.renderer.setStyles?.(`body{font-size:${17 * command.number}px!important;line-height:1.6}img,svg{max-width:100%}`); break
+        case 'zoom': {
+            const [family='system',,line='1.6',margin='32'] = String(window.leafStyle || '').split('|')
+            style(`${family}|${17 * command.number}|${line}|${margin}`); break
+        }
+        case 'style': window.leafStyle = command.text; style(command.text); break
         case 'spread': view.renderer.setAttribute('max-column-count', String(command.number)); break
-        case 'flow': view.renderer.setAttribute('flow', command.text); break
-        case 'fit': view.renderer.setStyles?.('body{font-size:17px;line-height:1.6}img,svg{max-width:100%}'); break
+        case 'flow': view.renderer.setAttribute('flow', command.text === 'continuous' ? 'scrolled' : 'paginated'); break
+        case 'fit': break
         case 'find': {
             if (!command.text) break
             if (query === command.text && hits.length) { selected = (selected + 1) % hits.length; await view.select(hits[selected].cfi); break }
@@ -139,7 +148,7 @@ try {
     await view.open(book)
     view.renderer.setAttribute('max-column-count', String(window.leafSpread ?? 1))
     view.renderer.setAttribute('flow', window.leafFlow ?? 'paginated')
-    view.renderer.setStyles?.('body{font-size:17px;line-height:1.6}img,svg{max-width:100%}')
+    style(window.leafStyle)
     post('toc', { items: flatten(book.toc) })
     await view.init({ lastLocation: window.leafLocation || undefined })
 } catch (error) { post('error', { message: error.message }) }
