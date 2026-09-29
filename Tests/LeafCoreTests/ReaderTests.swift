@@ -18,4 +18,11 @@ final class ReaderTests:XCTestCase{
         XCTAssertEqual(try LegacyText.palm(palm(mop),replica:true),pdf)
     }
     func testFormatMatrix(){XCTAssertEqual(Format.detect("BOOK.FB2.ZIP"),.book);XCTAssertEqual(Format.detect("icon.ICO"),.image);XCTAssertEqual(Format.detect("comic.CB7"),.comic);for e in Format.extensions{XCTAssertNotEqual(Format.detect("x."+e),.unknown,e)}}
+
+    func testSignatureSniffing(){
+        XCTAssertEqual(Format.sniff(Data("%PDF-1.7".utf8)),.pdf)
+        var mobi=Data(repeating:0,count:68);mobi.replaceSubrange(60..<68,with:Data("BOOKMOBI".utf8));XCTAssertEqual(Format.sniff(mobi),.book)
+        XCTAssertEqual(Format.sniff(Data([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])),.image)
+        XCTAssertEqual(Format.sniff(Data("ITSF".utf8)),.chm)
+    }
 }
