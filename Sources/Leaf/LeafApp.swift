@@ -11,7 +11,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
 @MainActor final class ReaderState:ObservableObject{
     @Published var document:ReadingDocument?,busy=false,error:String?,status="",page=0,count=0,zoom=1.0,fraction=0.0,outline:[ContentsItem]=[],command=ReaderCommand(),showContents=false,showFind=false,spread=false,rtl=false
     @Published var fit="page",flow="paged",font="system",fontSize=17.0,lineHeight=1.6,margin=32.0,theme="system",rotation=0,recents:[URL]=[]
-    var cfi:String?;private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,restoreTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?,watchedFD:Int32 = -1
+    var cfi:String?;private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,restoreTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?,watchedFD:Int32 = -1,generation=0
 
     init(){
         let d=UserDefaults.standard
@@ -29,14 +29,14 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     func send(_ name:String,text:String="",number:Double=0){command=.init(name:name,text:text,number:number)}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
-        persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;rotation=0;fraction=0;cfi=nil
+        restoreTask?.cancel();restoreTask=nil;generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;rotation=0;fraction=0;cfi=nil
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
-            do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled else{return}
+            do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return}
                 if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page);cfi=p.cfi;fraction=p.fraction}
                 document=opened;busy=false;watchFile(url);UserDefaults.standard.set(url.path,forKey:"lastDocument");NSDocumentController.shared.noteNewRecentDocumentURL(url);recents=NSDocumentController.shared.recentDocumentURLs.filter{FileManager.default.fileExists(atPath:$0.path)}
             }catch{if !Task.isCancelled{self.error=error.localizedDescription;busy=false}}}
     }
-    func close(){persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
+    func close(){generation+=1;restoreTask?.cancel();persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
     func reload(){guard let u=document?.url else{return};persist();loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await worker.value;guard !Task.isCancelled else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled{status="Reload failed";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page,cfi:cfi,fraction:fraction))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if isBook{send(d>0 ? "next":"prev")}else{page=max(0,min(max(0,count-1),page+d*(spread ? 2:1)));send("page",number:Double(page));persist()}}
