@@ -17,6 +17,7 @@ struct ReadingPosition:Codable{var page=0}
     @Published var count = 0
     @Published var zoom = 1.0
     @Published var outline: [ContentsItem] = []
+    @Published var outlineBusy = false
     @Published var command = ReaderCommand()
     @Published var showContents = false
     @Published var showFind = false
@@ -31,16 +32,23 @@ struct ReadingPosition:Codable{var page=0}
     @Published var theme = "system"
     @Published var rotation = 0
     @Published var reflowable = false
-    private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?
+    private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?,requestGeneration=0
     private(set) var generation=0
 
-    init(){
+    init(){readPreferences(layout:true)}
+    private func readPreferences(layout:Bool){
         let d=UserDefaults.standard
-        fit=d.string(forKey:"fit") ?? fit;flow=d.string(forKey:"flow") ?? flow;font=d.string(forKey:"font") ?? font;theme=d.string(forKey:"theme") ?? theme
-        if d.object(forKey:"fontSize") != nil{fontSize=d.double(forKey:"fontSize")}
-        if d.object(forKey:"lineHeight") != nil{lineHeight=d.double(forKey:"lineHeight")}
-        if d.object(forKey:"margin") != nil{margin=d.double(forKey:"margin")}
-        spread=d.bool(forKey:"spread");rtl=d.bool(forKey:"rtl")
+        if layout{fit=d.string(forKey:"fit") ?? "page";flow=d.string(forKey:"flow") ?? "paged";spread=d.bool(forKey:"spread");rtl=d.bool(forKey:"rtl")}
+        font=d.string(forKey:"font") ?? "system";theme=d.string(forKey:"theme") ?? "system"
+        fontSize=d.object(forKey:"fontSize") == nil ? 17:d.double(forKey:"fontSize")
+        lineHeight=d.object(forKey:"lineHeight") == nil ? 1.6:d.double(forKey:"lineHeight")
+        margin=d.object(forKey:"margin") == nil ? 32:d.double(forKey:"margin")
+    }
+    func syncAppearancePreferences(){
+        let old="\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)"
+        readPreferences(layout:false)
+        let now="\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)"
+        if old != now{send("style",text:now)}
     }
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
@@ -55,15 +63,16 @@ struct ReadingPosition:Codable{var page=0}
     func toggleFind(){showFind.toggle();if !showFind{send("toc")}}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
-        generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];page=0;count=0;zoom=1;rotation=0;reflowable=false
+        persist();requestGeneration+=1;let g=requestGeneration;loading?.cancel();busy=true;error=nil;status="Opening \(url.lastPathComponent)…"
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
-            do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return}
+            do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==requestGeneration else{return}
+                readPreferences(layout:true);outline=[];outlineBusy=false;page=0;count=0;zoom=1;rotation=0;reflowable=false
                 if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page)}
-                document=opened;busy=false;watchFile(url);NSDocumentController.shared.noteNewRecentDocumentURL(url)
-            }catch{if !Task.isCancelled{self.error=error.localizedDescription;busy=false}}}
+                generation+=1;document=opened;busy=false;status="";watchFile(url);NSDocumentController.shared.noteNewRecentDocumentURL(url)
+            }catch{if !Task.isCancelled,g==requestGeneration{self.error=error.localizedDescription;busy=false;status=""}}}
     }
-    func close(){generation+=1;persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];count=0;status="";reflowable=false}
-    func reload(){guard let u=document?.url else{return};persist();generation+=1;let g=generation;loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==generation{status="Reload failed";error=error.localizedDescription}}}}
+    func close(){requestGeneration+=1;generation+=1;persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];outlineBusy=false;count=0;status="";reflowable=false}
+    func reload(){guard let u=document?.url else{return};persist();requestGeneration+=1;let g=requestGeneration;loading?.cancel();status="Reloading…";loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==requestGeneration else{return};generation+=1;document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==requestGeneration{status="";error=error.localizedDescription}}}}
     func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if isCHM{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
     func go(_ s:String){guard let n=Double(s),n.isFinite else{return};page=Int(max(0,min(Double(max(0,count-1)),n-1)));send("page",number:Double(page));persist()}
@@ -118,6 +127,7 @@ private extension FocusedValues{
             .task(id:payload.path){if state.document==nil,let path=payload.path,FileManager.default.fileExists(atPath:path){state.open(URL(fileURLWithPath:path))}}
             .onChange(of:state.document?.url.path){payload.path=$0}
             .onOpenURL{state.open($0)}
+            .onReceive(NotificationCenter.default.publisher(for:UserDefaults.didChangeNotification)){_ in state.syncAppearancePreferences()}
             .onReceive(NotificationCenter.default.publisher(for:NSApplication.willTerminateNotification)){_ in state.persist()}
     }
 }
@@ -174,13 +184,14 @@ private struct LeafCommands:Commands{
     @ObservedObject var state:ReaderState;@State private var query="";@State private var destination="";@FocusState private var finding:Bool
     var body:some View{VStack(spacing:0){
         if state.showFind{HStack{TextField("Find in document",text:$query).focused($finding).onSubmit{state.send("find",text:query)};Button("Find Next"){state.send("find",text:query)};Button{state.showFind=false;state.send("toc")}label:{Image(systemName:"xmark")}}.padding(8).onAppear{finding=true};Divider()}
-        HStack(spacing:0){if state.showContents{List(Array(state.outline.enumerated()),id:\.offset){_,i in Button{state.send("href",text:i.target)}label:{Text(i.title).lineLimit(2).padding(.leading,CGFloat(i.depth*10))}.buttonStyle(.plain)}.frame(width:210);Divider()}
+        HStack(spacing:0){if state.showContents{Group{if state.outlineBusy{VStack{Spacer();ProgressView();Text("Detecting chapters…").font(.caption).foregroundStyle(.secondary);Spacer()}}else if state.outline.isEmpty{VStack{Spacer();Text("No contents").font(.caption).foregroundStyle(.secondary);Spacer()}}else{List(Array(state.outline.enumerated()),id:\.offset){_,i in Button{state.send("href",text:i.target)}label:{Text(i.title).lineLimit(2).padding(.leading,CGFloat(i.depth*10))}.buttonStyle(.plain)}}}.frame(width:210);Divider()}
             Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{WelcomeView(open:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)}
         if state.document != nil{Divider();HStack{Text(state.status.isEmpty ? (state.document?.url.lastPathComponent ?? ""):state.status).lineLimit(1);Spacer();if state.count>0{Text(state.positionLabel).monospacedDigit()};Text("\(Int(state.zoom*100))%").monospacedDigit()}.font(.caption).foregroundStyle(.secondary).padding(.horizontal,8).padding(.vertical,4)}
     }.navigationTitle(state.document?.url.lastPathComponent ?? "Leaf")
+    .preferredColorScheme(state.theme=="dark" ? .dark:state.theme=="light" ? .light:nil)
     .onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread");if state.supportsSpread{state.send("spread",number:$0 ? 2:1)}}
     .onChange(of:state.rtl){UserDefaults.standard.set($0,forKey:"rtl");if state.supportsRTL{state.send("rtl",number:$0 ? 1:0)}}
-    .toolbar{Button(action:state.chooseFile){Image(systemName:"folder")}.help("Open");Button{state.showContents.toggle()}label:{Image(systemName:"sidebar.left")};Button{state.turn(-1)}label:{Image(systemName:"chevron.left")};Text(state.positionLabel).monospacedDigit();Button{state.turn(1)}label:{Image(systemName:"chevron.right")};TextField(state.isText ? "Line":"Page",text:$destination).frame(width:55).onSubmit{state.go(destination);destination=""};Menu{if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")};Button("Actual Size"){state.setFit("actual")};Divider()};if state.supportsFlow{Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);if state.supportsRTL{Toggle("Right to Left",isOn:$state.rtl)};Divider()};if state.isText || state.isCHM || state.reflowable{TypographyMenu(state:state);Divider()};if state.supportsRotation{Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)};Divider()};Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}}label:{Image(systemName:"textformat.size")};Button{state.setZoom(state.zoom/1.2)}label:{Image(systemName:"minus.magnifyingglass")};Button{state.setZoom(state.zoom*1.2)}label:{Image(systemName:"plus.magnifyingglass")};Button{state.toggleFind()}label:{Image(systemName:"magnifyingglass")}}
+    .toolbar{Button(action:state.chooseFile){Image(systemName:"folder")}.help("Open");Button{state.showContents.toggle()}label:{Image(systemName:"sidebar.left")}.disabled(state.document==nil);Button{state.turn(-1)}label:{Image(systemName:"chevron.left")};Text(state.positionLabel).monospacedDigit();Button{state.turn(1)}label:{Image(systemName:"chevron.right")};TextField(state.isText ? "Line":"Page",text:$destination).frame(width:55).onSubmit{state.go(destination);destination=""};Menu{if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")};Button("Actual Size"){state.setFit("actual")};Divider()};if state.supportsFlow{Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);if state.supportsRTL{Toggle("Right to Left",isOn:$state.rtl)};Divider()};if state.isText || state.isCHM || state.reflowable{TypographyMenu(state:state);Divider()};if state.supportsRotation{Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)};Divider()};Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}}label:{Image(systemName:"textformat.size")};Button{state.setZoom(state.zoom/1.2)}label:{Image(systemName:"minus.magnifyingglass")};Button{state.setZoom(state.zoom*1.2)}label:{Image(systemName:"plus.magnifyingglass")};Button{state.toggleFind()}label:{Image(systemName:"magnifyingglass")}}
     .contextMenu{Button("Open…",action:state.chooseFile);if state.document != nil{Button("Show in Finder"){if let u=state.document?.url{NSWorkspace.shared.activateFileViewerSelecting([u])}};Button("Copy File Path",action:state.copyPath);Divider();Button("Previous"){state.turn(-1)};Button("Next"){state.turn(1)};if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")}}}}
     .onDrop(of:[.fileURL],isTargeted:nil){items in guard let item=items.first else{return false};_=item.loadObject(ofClass:URL.self){u,_ in if let u{Task{@MainActor in state.open(u)}}};return true}
     .alert("Unable to read document",isPresented:Binding(get:{state.error != nil},set:{if !$0{state.error=nil}})){Button("OK"){state.error=nil}}message:{Text(state.error ?? "")}}
@@ -189,7 +200,7 @@ private struct LeafCommands:Commands{
 private struct WelcomeView:View{
     let open:()->Void
     var body:some View{VStack(spacing:14){
-        Image(systemName:"leaf").font(.system(size:46,weight:.light)).foregroundStyle(.secondary)
+        Image(nsImage:NSApp.applicationIconImage).resizable().scaledToFit().frame(width:72,height:72)
         Text("Leaf").font(.largeTitle.weight(.semibold))
         Text("A fast, focused document reader for macOS").foregroundStyle(.secondary)
         Button("Open Document…",action:open).keyboardShortcut("o")
