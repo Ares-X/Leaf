@@ -175,7 +175,7 @@ private struct LeafCommands:Commands{
     var body:some View{VStack(spacing:0){
         if state.showFind{HStack{TextField("Find in document",text:$query).focused($finding).onSubmit{state.send("find",text:query)};Button("Find Next"){state.send("find",text:query)};Button{state.showFind=false;state.send("toc")}label:{Image(systemName:"xmark")}}.padding(8).onAppear{finding=true};Divider()}
         HStack(spacing:0){if state.showContents{List(Array(state.outline.enumerated()),id:\.offset){_,i in Button{state.send("href",text:i.target)}label:{Text(i.title).lineLimit(2).padding(.leading,CGFloat(i.depth*10))}.buttonStyle(.plain)}.frame(width:210);Divider()}
-            Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{Button("Open a document…",action:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)}
+            Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{WelcomeView(open:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)}
         if state.document != nil{Divider();HStack{Text(state.status.isEmpty ? (state.document?.url.lastPathComponent ?? ""):state.status).lineLimit(1);Spacer();if state.count>0{Text(state.positionLabel).monospacedDigit()};Text("\(Int(state.zoom*100))%").monospacedDigit()}.font(.caption).foregroundStyle(.secondary).padding(.horizontal,8).padding(.vertical,4)}
     }.navigationTitle(state.document?.url.lastPathComponent ?? "Leaf")
     .onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread");if state.supportsSpread{state.send("spread",number:$0 ? 2:1)}}
@@ -185,6 +185,16 @@ private struct LeafCommands:Commands{
     .onDrop(of:[.fileURL],isTargeted:nil){items in guard let item=items.first else{return false};_=item.loadObject(ofClass:URL.self){u,_ in if let u{Task{@MainActor in state.open(u)}}};return true}
     .alert("Unable to read document",isPresented:Binding(get:{state.error != nil},set:{if !$0{state.error=nil}})){Button("OK"){state.error=nil}}message:{Text(state.error ?? "")}}
     @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
+}
+private struct WelcomeView:View{
+    let open:()->Void
+    var body:some View{VStack(spacing:14){
+        Image(systemName:"leaf").font(.system(size:46,weight:.light)).foregroundStyle(.secondary)
+        Text("Leaf").font(.largeTitle.weight(.semibold))
+        Text("A fast, focused document reader for macOS").foregroundStyle(.secondary)
+        Button("Open Document…",action:open).keyboardShortcut("o")
+        Text("Drop a document here, or use File → Open").font(.caption).foregroundStyle(.tertiary)
+    }.padding(40)}
 }
 struct TypographyMenu:View{@ObservedObject var state:ReaderState;var body:some View{Group{Picker("Font",selection:$state.font){Text("System").tag("system");Text("Serif").tag("serif");Text("Sans Serif").tag("sans-serif");Text("Monospace").tag("monospace")}.onChange(of:state.font){_ in state.applyTypography()};Stepper("Font \(Int(state.fontSize)) pt",value:$state.fontSize,in:10...36,step:1).onChange(of:state.fontSize){_ in state.applyTypography()};Stepper("Line \(state.lineHeight,specifier:"%.1f")",value:$state.lineHeight,in:1...2.4,step:0.1).onChange(of:state.lineHeight){_ in state.applyTypography()};Stepper("Margin \(Int(state.margin))",value:$state.margin,in:0...96,step:8).onChange(of:state.margin){_ in state.applyTypography()}}}}
 #else
