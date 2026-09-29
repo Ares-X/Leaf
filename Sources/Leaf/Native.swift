@@ -12,7 +12,7 @@ final class NativeFile {
     let library: UnsafeMutableRawPointer
     let document: UnsafeMutableRawPointer
     private let closeDocument:Close,render:Render?
-    private let textFn:UnsafeMutableRawPointer?,pathFn:UnsafeMutableRawPointer?,readFn:UnsafeMutableRawPointer?
+    private let textFn:UnsafeMutableRawPointer?,pathFn:UnsafeMutableRawPointer?,readFn:UnsafeMutableRawPointer?,relayoutFn:UnsafeMutableRawPointer?
     let count:Int
 
     init(_ url: URL, engine: String) throws {
@@ -34,7 +34,7 @@ final class NativeFile {
             guard let document = open(url.path, &error) else { throw ReadError(String(cString: error).isEmpty ? "Cannot decode this file" : String(cString: error)) }
             let count = Int(pageCount(document))
             guard count > 0 else { close(document); throw ReadError("Document has no readable content") }
-            self.library=library;self.document=document;self.closeDocument=close;self.render=dlsym(library,"lf_render").map{unsafeBitCast($0,to:Render.self)};self.textFn=dlsym(library,"lf_text");self.pathFn=dlsym(library,"lf_path");self.readFn=dlsym(library,"lf_read");self.count=count
+            self.library=library;self.document=document;self.closeDocument=close;self.render=dlsym(library,"lf_render").map{unsafeBitCast($0,to:Render.self)};self.textFn=dlsym(library,"lf_text");self.pathFn=dlsym(library,"lf_path");self.readFn=dlsym(library,"lf_read");self.relayoutFn=dlsym(library,"lf_relayout");self.count=count
         } catch { dlclose(library); throw error }
     }
     deinit { closeDocument(document); dlclose(library) }
@@ -61,6 +61,14 @@ final class NativeFile {
         return image
     }
     var hasText:Bool{textFn != nil}
+    var isReflowable:Bool{relayoutFn != nil}
+    func relayout(fontSize:Double,lineHeight:Double,margin:Double,font:String)->Int?{
+        typealias Layout=@convention(c)(UnsafeMutableRawPointer,Float,UnsafePointer<CChar>)->Int32
+        guard let relayoutFn else{return nil}
+        let family=font=="serif" ? "serif":font=="monospace" ? "monospace":font=="sans-serif" ? "sans-serif":"system-ui"
+        let css="body{font-family:\(family);line-height:\(lineHeight);margin:\(margin)px}"
+        return css.withCString{let n=unsafeBitCast(relayoutFn,to:Layout.self)(document,Float(fontSize),$0);return n>0 ? Int(n):nil}
+    }
     func text(_ page: Int) -> String? {
         typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32) -> UnsafeMutablePointer<CChar>?
         guard let fn=textFn else{return nil};let get=unsafeBitCast(fn,to:Get.self);guard let p=get(document,Int32(page)) else{return nil}
