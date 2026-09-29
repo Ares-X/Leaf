@@ -1,0 +1,80 @@
+#if os(macOS)
+import AppKit
+import Darwin
+import LeafCore
+
+/// A tiny ABI, not a plug-in framework. Libraries load only when their format is opened.
+final class NativeFile {
+    typealias Open = @convention(c) (UnsafePointer<CChar>, UnsafeMutablePointer<CChar>) -> UnsafeMutableRawPointer?
+    typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
+    typealias Count = @convention(c) (UnsafeMutableRawPointer) -> Int32
+    typealias Render = @convention(c) (UnsafeMutableRawPointer, Int32, Int32, UnsafeMutablePointer<Int32>, UnsafeMutablePointer<CChar>) -> UnsafeMutableRawPointer?
+    let library: UnsafeMutableRawPointer
+    let document: UnsafeMutableRawPointer
+    private let closeDocument: Close
+    let count: Int
+
+    init(_ url: URL, engine: String) throws {
+        let candidates = [Bundle.main.privateFrameworksURL, URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/engines")].compactMap { $0?.appendingPathComponent(engine + ".dylib").path }
+        let path = candidates.first { FileManager.default.fileExists(atPath: $0) } ?? candidates[0]
+        guard let library = dlopen(path, RTLD_LOCAL | RTLD_NOW) else {
+            throw ReadError("\(engine) engine is missing. Build Leaf with scripts/build-engines.sh, then rebuild the app.")
+        }
+        func symbol<T>(_ name: String, _: T.Type) throws -> T {
+            guard let p = dlsym(library, name) else { throw ReadError("Incompatible \(engine) engine: \(name)") }
+            return unsafeBitCast(p, to: T.self)
+        }
+        do {
+            let abi = try symbol("lf_abi", (@convention(c) () -> Int32).self)
+            guard abi() == 1 else { throw ReadError("Incompatible engine ABI") }
+            let open = try symbol("lf_open", Open.self), close = try symbol("lf_close", Close.self)
+            let pageCount = try symbol("lf_count", Count.self)
+            var error = [CChar](repeating: 0, count: 512)
+            guard let document = open(url.path, &error) else { throw ReadError(String(cString: error).isEmpty ? "Cannot decode this file" : String(cString: error)) }
+            let count = Int(pageCount(document))
+            guard count > 0 else { close(document); throw ReadError("Document has no readable content") }
+            self.library = library; self.document = document; self.closeDocument = close; self.count = count
+        } catch { dlclose(library); throw error }
+    }
+    deinit { closeDocument(document); dlclose(library) }
+    func symbol<T>(_ name: String, _: T.Type) throws -> T {
+        guard let p = dlsym(library, name) else { throw ReadError("This engine does not provide \(name)") }
+        return unsafeBitCast(p, to: T.self)
+    }
+    func image(_ page: Int, width: Int) throws -> CGImage {
+        let render = try symbol("lf_render", Render.self)
+        var info = [Int32](repeating: 0, count: 4), error = [CChar](repeating: 0, count: 512)
+        guard let p = render(document, Int32(page), Int32(width), &info, &error) else {
+            throw ReadError(String(cString: error).isEmpty ? "Cannot render page" : String(cString: error))
+        }
+        let w = Int(info[0]), h = Int(info[1]), stride = Int(info[2]), channels = Int(info[3])
+        guard w > 0, h > 0, [3, 4].contains(channels), stride >= w * channels else { free(p); throw ReadError("Invalid page bitmap") }
+        let data = Data(bytesNoCopy: p, count: stride * h, deallocator: .free)
+        guard let provider = CGDataProvider(data: data as CFData),
+              let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: channels * 8,
+                                  bytesPerRow: stride, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGBitmapInfo(rawValue: (channels == 4 ? CGImageAlphaInfo.last : .none).rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else {
+            throw ReadError("Cannot create page image")
+        }
+        return image
+    }
+    var hasText: Bool { dlsym(library, "lf_text") != nil }
+    func text(_ page: Int) -> String? {
+        typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32) -> UnsafeMutablePointer<CChar>?
+        guard let get = try? symbol("lf_text", Get.self), let p = get(document, Int32(page)) else { return nil }
+        defer { free(p) }; return String(cString: p)
+    }
+    func path(_ index: Int) throws -> String {
+        typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32) -> UnsafePointer<CChar>?
+        guard let p = try symbol("lf_path", Get.self)(document, Int32(index)) else { throw ReadError("Missing CHM entry") }
+        return String(cString: p)
+    }
+    func data(_ index: Int) throws -> Data {
+        typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32, UnsafeMutablePointer<Int>) -> UnsafeMutableRawPointer?
+        var size = 0
+        guard let p = try symbol("lf_read", Get.self)(document, Int32(index), &size) else { throw ReadError("Cannot read CHM entry") }
+        return Data(bytesNoCopy: p, count: size, deallocator: .free)
+    }
+}
+#endif

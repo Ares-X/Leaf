@@ -1,41 +1,115 @@
 # Leaf
 
-Tiny native macOS reader. Open a file, read it, close it.
+A small, native macOS reader. Open a file, read it, close it.
 
-**Built in:** PDF · EPUB · TXT/LOG · Markdown · FB2 · CBZ/ZIP · JPG/PNG/GIF/WebP/HEIC/TIFF/BMP
+**Engine integration in progress — not a release or a claim of tested SumatraPDF parity.**
+The current source replaces the prototype's hand-written ZIP/EPUB/FB2 parsers and
+Calibre/unar conversions with mature decoders and a small native shell.
 
-**Optional tiny backends:** MOBI/AZW/AZW3 via Calibre's `ebook-convert`, DjVu via `ddjvu`, CBR via `unar`.
+## Reading
 
-- native SwiftUI/AppKit, PDFKit and WebKit
-- tiny in-tree ZIP reader + system zlib
-- remembers PDF pages and EPUB/CBZ positions
-- keyboard arrows for EPUB/CBZ
-- Finder document associations
-- no Electron/Tauri, library database, account, sync, telemetry, plugin framework or settings maze
+Open/Finder/drop/recent files; contents; search; page or percentage navigation;
+zoom; fit page/width; two-page comics/PDF; right-to-left comics/PDF; GIF playback;
+one bookmark per document; persistent PDF page, text line and e-book CFI.
+PDF uses PDFKit, text uses NSTextView, e-books use the system WebKit with Foliate.
+There is no Electron, Chromium distribution, Node runtime, library database,
+account, cloud sync, updater, telemetry or general-purpose plug-in framework.
 
-Leaf borrows SumatraPDF's useful idea of dispatching formats to small dedicated readers, but is a clean-room Swift implementation.
+## Format routes
 
-## Build
+This table tracks the [SumatraPDF format list](https://www.sumatrapdfreader.org/docs/Supported-document-formats).
+It documents **implemented dispatch/adapters**, not successful end-to-end fixtures
+for every format. Rare formats need the full build's decoder libraries.
 
-```bash
-swift test
+| Files | Engine/path |
+| --- | --- |
+| PDF, PDF-compatible AI | PDFKit; password prompt for encrypted PDF |
+| EPUB, MOBI, AZW, AZW3/KF8, PRC | Foliate + WebKit; native slice/entry reads, no Calibre |
+| FB2, FB2Z, FBZ, ZFB2, FB2.ZIP | Foliate + libarchive |
+| AZW4/Print Replica | Palm record adapter → embedded PDF → PDFKit |
+| Palm DOC/PDB, TCR | small legacy adapters → NSTextView |
+| TXT, LOG, NFO | NSTextView; UTF-8 / Foundation encoding detection |
+| Markdown | Marked (GFM) → Foliate; not a home-written Markdown parser |
+| HTML, HTM, XHTML | WebKit/Foliate local-document adapter |
+| CBZ, CBR, CB7, CBT, ZIP, RAR, 7Z, TAR | system libarchive → ImageIO/native image decoder |
+| ORA | its merged image; not the individual layer files |
+| DjVu, DJV | DjVuLibre, page-at-a-time |
+| CHM | CHMLib entry reads + WebKit; HHC contents and local links |
+| XPS, OXPS, XOD, DWFX, SVG | selective MuPDF build |
+| PNG, JPEG/JFIF, GIF, TIFF, BMP/DIB, TGA, WebP, JPEG 2000 | ImageIO first, MuPDF fallback |
+| JPEG XR: JXR, HDP, WDP | MuPDF codec; requires real-file verification |
+| JPEG XL | libjxl; current adapter decodes the first frame |
+| AVIF, HEIF/HEIC | ImageIO; availability and variants depend on the macOS codec |
+| PS, EPS, PJL, PostScript AI | Ghostscript, **external and optional**, as in Sumatra |
+
+Image folders can also be read as comics. TIFF frames are treated as pages;
+standalone GIFs can play/pause. DRM is not removed. PDB is Palm DOC/MOBI rather
+than arbitrary Palm databases. The Print Replica adapter currently handles
+uncompressed/PalmDOC-compressed records, not every possible Kindle container.
+Publication JavaScript, CHM active content and arbitrary network resources are
+not executed. Fixed-layout EPUB/CHM compatibility still needs sample testing.
+
+## What makes it small
+
+- Native libraries are loaded only when their format is opened and released with the document.
+- The app does not unpack EPUB/comic archives into a temporary library.
+- Comic images are decoded for the viewport and cached as at most three images,
+  with a 64 MiB cache target. A single oversized image can exceed that target;
+  this is **not** a limit on total process memory. JPEG XL currently needs a full-frame decode.
+- Reflow, CFI, nested FB2 markup, font deobfuscation and book search are supplied by Foliate.
+- MuPDF is built for size without its duplicate PDF/comic/e-book readers, JS,
+  OCR, barcode and office export components. Required fonts/codecs are not blindly removed.
+- No full-document PDF conversion for DjVu/XPS; only PS uses a temporary conversion.
+- Solid RAR/7z archives still have their inherent seek/decompression cost.
+- WebKit has its own process/memory cost. Measure it with the app, not just Leaf's main process.
+
+## Build on macOS
+
+A macOS SDK / Xcode command-line toolchain is required for the GUI.
+The deployment target is 13.0; the oldest OS/WebKit combination is not yet tested.
+No GitHub Actions jobs run automatically.
+
+```sh
+# Native decoder build dependencies; not required by users of a bundled app.
+brew install pkgconf djvulibre chmlib jpeg-xl
 ./scripts/build-app.sh
 open dist/Leaf.app
 ```
 
-macOS 13+.
+The first build checks out pinned Foliate and MuPDF revisions, fetches Marked
+15.0.12's published ESM, builds the selective MuPDF library, and bundles only
+linked decoder dylibs. Later builds reuse downloads and incremental outputs.
+Homebrew library versions/build receipts are recorded in the bundle; those
+three dependencies are not fully pinned yet. The result is a local ad-hoc signed
+bundle, **not a notarized or redistribution-audited release**. A public binary
+release must also supply the corresponding dependency sources and license notices.
 
-Optional formats:
-
-```bash
-brew install --cask calibre
-brew install djvulibre unar
+```sh
+./scripts/build-app.sh --core  # omit MuPDF/DjVu/CHM/JXL; fewer formats, not full parity
+./scripts/run-dev.sh           # prepare JS resources, then swift run
+swift test                    # three focused portable core checks; also works on Linux
 ```
 
-## MVP scope
+Optional PostScript: `brew install ghostscript`.
 
-Reading first. Editing, annotation management, cloud libraries and DRM are deliberately out of scope.
+## Verification in this change
+
+- Linux / Swift 6.2.1: portable build and three XCTest cases passed: actual
+  Deflate/ZIP64 entry reads/natural ordering, Palm/TCR/Print Replica byte handling,
+  and compound-extension routing.
+- C MuPDF bridge: compiled and executed on Linux against the available MuPDF
+  1.26.12; SVG rasterization and extracted text checked.
+- macOS-target Swift **syntax parsing only**, JavaScript syntax and shell/Python syntax checked.
+- **Not run:** macOS SDK type-check/link, WKWebView interaction, pinned native
+  decoder build, app signing/loading, the full format corpus, launch/RSS benchmarks.
+
+Next acceptance work is running the full build on macOS, checking the resource
+bridge and dylib loading, then testing representative files for every table row
+(including solid RAR, JPEG XR/XL/AVIF, malformed books and complex EPUB layout).
+Installed size, cold start, first page and total memory remain **unmeasured**.
 
 ## License
 
-MIT
+New Leaf code: **AGPL-3.0-or-later**. The full MuPDF build must not be represented
+as MIT-only. Earlier Leaf MIT notices and the Sumatra BSD notice are retained;
+upstream libraries keep their licenses. See [THIRD_PARTY.md](THIRD_PARTY.md).
