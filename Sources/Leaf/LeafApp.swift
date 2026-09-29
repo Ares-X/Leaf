@@ -73,6 +73,7 @@ struct ReadingPosition:Codable{var page=0}
     var printTitle:String{printsCurrentPageOnly ? "Print Current Page…":"Print…"}
     var hasBookmark:Bool{guard let u=document?.url else{return false};return UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path) != nil}
     var positionLabel:String{count>0 ? "\(min(page+1,count)) / \(count)":"— / —"}
+    var resolvedTheme:String{theme=="system" ? (NSApp.effectiveAppearance.bestMatch(from:[.darkAqua,.aqua]) == .darkAqua ? "dark":"light"):theme}
     var zoomLabel:String{
         if isText || isCHM || fit=="custom"{return "\(Int(zoom*100))%"}
         if fit=="width"{return "Fit Width"}
@@ -204,7 +205,7 @@ private struct LeafCommands:Commands{
 }
 
 @MainActor struct ReaderView:View{
-    @ObservedObject var state:ReaderState;@State private var query="";@State private var destination="";@FocusState private var finding:Bool;@Environment(\.openWindow) private var openWindow
+    @ObservedObject var state:ReaderState;@State private var query="";@State private var destination="";@FocusState private var finding:Bool;@Environment(\.openWindow) private var openWindow;@Environment(\.colorScheme) private var colorScheme
     var body:some View{VStack(spacing:0){
         if state.showFind{HStack{TextField("Find in document",text:$query).focused($finding).onSubmit{state.send("find",text:query)}.onExitCommand{state.closeFind()};Button("Find Next"){state.send("find",text:query)};Button{state.closeFind()}label:{Image(systemName:"xmark")}}.padding(8).onAppear{finding=true};Divider()}
         mainArea
@@ -212,6 +213,7 @@ private struct LeafCommands:Commands{
     }.navigationTitle(state.document?.url.lastPathComponent ?? "Leaf")
     .modifier(DocumentProxy(url:state.document?.url))
     .preferredColorScheme(state.theme=="dark" ? .dark:state.theme=="light" ? .light:nil)
+    .onChange(of:colorScheme){_ in if state.theme=="system",state.reflowable{state.send("style",text:"\(state.font)|\(state.fontSize)|\(state.lineHeight)|\(state.margin)|system")}}
     .onChange(of:state.spread){UserDefaults.standard.set($0,forKey:"spread");if state.supportsSpread{state.send("spread",number:$0 ? 2:1)}}
     .onChange(of:state.rtl){UserDefaults.standard.set($0,forKey:"rtl");if state.supportsRTL{state.send("rtl",number:$0 ? 1:0)}}
     .toolbar{Button(action:state.chooseFile){Image(systemName:"folder")}.help("Open Document");Button{state.showContents.toggle()}label:{Image(systemName:"sidebar.left")}.disabled(!state.hasDocument).help("Toggle Contents");Button{state.turn(-1)}label:{Image(systemName:"chevron.left")}.disabled(!state.canTurn).help("Previous Page");if state.hasDocument{Text(state.positionLabel).monospacedDigit()};Button{state.turn(1)}label:{Image(systemName:"chevron.right")}.disabled(!state.canTurn).help("Next Page");TextField(state.isText ? "Line":"Page",text:$destination).frame(width:55).disabled(!state.hasDocument || state.isCHM).onSubmit{state.go(destination);destination=""};Menu{if state.supportsFit{Button("Fit Page"){state.setFit("page")};Button("Fit Width"){state.setFit("width")};Button("Actual Size"){state.setFit("actual")};Divider()};if state.supportsFlow{Button("Paged"){state.setFlow("paged")};Button("Continuous"){state.setFlow("continuous")};Toggle("Two Pages",isOn:$state.spread);if state.supportsRTL{Toggle("Right to Left",isOn:$state.rtl)};Divider()};if state.isText || state.isCHM || state.reflowable{TypographyMenu(state:state);Divider()};if state.supportsRotation{Button("Rotate Left"){state.rotate(-90)};Button("Rotate Right"){state.rotate(90)};Divider()};Button("Light"){state.setTheme("light")};Button("Dark"){state.setTheme("dark")};Button("System Theme"){state.setTheme("system")}}label:{Image(systemName:"slider.horizontal.3")}.help("Reading Options");Button{state.setZoom(state.zoom/1.2)}label:{Image(systemName:"minus.magnifyingglass")}.disabled(!state.hasDocument).help("Zoom Out");Button{state.setZoom(state.zoom*1.2)}label:{Image(systemName:"plus.magnifyingglass")}.disabled(!state.hasDocument).help("Zoom In");Button{state.showFindPanel()}label:{Image(systemName:"magnifyingglass")}.disabled(!state.supportsSearch).help("Find")}
@@ -230,7 +232,7 @@ private struct LeafCommands:Commands{
     @ViewBuilder var documentArea:some View{
         Group{if let d=state.document{content(d).id(state.generation)}else if state.busy{ProgressView("Opening…")}else{WelcomeView(open:state.chooseFile)}}.frame(maxWidth:.infinity,maxHeight:.infinity)
     }
-    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{state.searchable=await p.hasText;if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font,theme:state.theme){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
+    @ViewBuilder func content(_ d:ReadingDocument)->some View{switch d.content{case .pdf(let u,let x):PDFReader(state:state,url:u,data:x);case .text(let t):TextReader(state:state,text:t);case .chm(let s):CHMReader(state:state,source:s);case .pages(let p):RasterReader(state:state,pages:p).task{state.searchable=await p.hasText;if let n=await p.relayout(fontSize:state.fontSize,lineHeight:state.lineHeight,margin:state.margin,font:state.font,theme:state.resolvedTheme){state.reflowable=true;state.count=n}else{state.reflowable=false;state.count=await p.count};guard !Task.isCancelled else{return};state.page=max(0,min(state.page,state.count-1))}}}
 }
 private struct DocumentProxy:ViewModifier{
     let url:URL?
