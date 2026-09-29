@@ -34,10 +34,10 @@ API Document *lf_open(const char *path, char *error) {
     if (!ok) { snprintf(error, 512, "Cannot decode JPEG XL"); lf_close(d); return NULL; }
     return d;
 }
-API unsigned char *lf_render(Document *d, int page, int width, int *info, char *error) {
-    (void)page; (void)width; (void)error;
-    info[0] = d->width; info[1] = d->height; info[2] = d->width * 4; info[3] = 4;
-    size_t n = (size_t)info[2] * info[1]; unsigned char *out = malloc(n);
-    if (out) memcpy(out, d->pixels, n);
-    return out;
+API unsigned char *lf_render(Document *d,int page,int width,int *info,char *error){
+    (void)page;(void)width;(void)error;
+    if(d->width<=0||d->height<=0||d->width>INT_MAX/4||(size_t)d->height>SIZE_MAX/((size_t)d->width*4))return NULL;
+    info[0]=d->width;info[1]=d->height;info[2]=d->width*4;info[3]=4;
+    size_t n=(size_t)info[2]*(size_t)info[1];unsigned char *out=malloc(n);
+    if(out)memcpy(out,d->pixels,n);return out;
 }
