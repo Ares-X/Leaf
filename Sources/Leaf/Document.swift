@@ -29,17 +29,10 @@ struct ReadingDocument{
             do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
             catch{return .init(url:url,content:.text(decode(try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe)))))}
         case .tcr:return .init(url:url,content:.text(decode(try LegacyText.tcr(Data(contentsOf:url,options:.mappedIfSafe))))
-        case .book,.markdown:
-            do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
-            catch{return .init(url:url,content:.book(try BookSource(url,format:format)))}
-        case .html:
-            do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
-            catch{return .init(url:url,content:.book(try BookSource(url,format:format)))}
+        case .book,.markdown,.html:return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))
         case .chm:return .init(url:url,content:.book(try BookSource(url,format:format)))
         case .lit:
-            let (temp,root)=try LitConverter.convert(url)
-            do{return .init(url:url,content:.pages(try Pages(root,format:.mupdf)),temporary:temp)}
-            catch{return .init(url:url,content:.book(try BookSource(root,format:.book,root:root)),temporary:temp)}
+            let (temp,root)=try LitConverter.convert(url);return .init(url:url,content:.pages(try Pages(root,format:.mupdf)),temporary:temp)
         case .image,.comic,.mupdf,.djvu:return .init(url:url,content:.pages(try Pages(url,format:format)))
         case .postscript:
             let candidates=["/opt/homebrew/bin/gs","/usr/local/bin/gs","/usr/bin/gs"];guard let gs=candidates.first(where:{FileManager.default.isExecutableFile(atPath:$0)})else{throw ReadError("PostScript/PJL needs Ghostscript.")}
