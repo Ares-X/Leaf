@@ -6,7 +6,7 @@ import Darwin
 
 struct ReaderCommand:Equatable{let id=UUID();var name="",text="";var number=0.0}
 struct ContentsItem:Identifiable,Codable{var id:String{target};let title:String,target:String;var depth=0}
-struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
+struct ReadingPosition:Codable{var page=0}
 
 @MainActor final class ReaderState:ObservableObject{
     @Published var document: ReadingDocument?
@@ -16,7 +16,6 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     @Published var page = 0
     @Published var count = 0
     @Published var zoom = 1.0
-    @Published var fraction = 0.0
     @Published var outline: [ContentsItem] = []
     @Published var searchResults: [ContentsItem] = []
     @Published var command = ReaderCommand()
@@ -32,7 +31,7 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     @Published var margin = 32.0
     @Published var theme = "system"
     @Published var rotation = 0
-    var cfi:String?;private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,restoreTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?
+    private var loading:Task<Void,Never>?,reloadTask:Task<Void,Never>?,restoreTask:Task<Void,Never>?,watch:DispatchSourceFileSystemObject?
     private(set) var generation=0
 
     init(){
@@ -55,16 +54,16 @@ struct ReadingPosition:Codable{var page=0;var cfi:String?;var fraction=0.0}
     func send(_ name:String,text:String="",number:Double=0){command = .init(name:name,text:text,number:number)}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
-        restoreTask?.cancel();restoreTask=nil;generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];searchResults=[];page=0;count=0;zoom=1;rotation=0;fraction=0;cfi=nil
+        restoreTask?.cancel();restoreTask=nil;generation+=1;let g=generation;persist();loading?.cancel();document=nil;busy=true;error=nil;status="";outline=[];searchResults=[];page=0;count=0;zoom=1;rotation=0
         loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(url)}
             do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return}
-                if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page);cfi=p.cfi;fraction=p.fraction}
+                if let d=UserDefaults.standard.data(forKey:"position:"+url.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d){page=max(0,p.page)}
                 document=opened;busy=false;watchFile(url);UserDefaults.standard.set(url.path,forKey:"lastDocument");NSDocumentController.shared.noteNewRecentDocumentURL(url)
             }catch{if !Task.isCancelled{self.error=error.localizedDescription;busy=false}}}
     }
     func close(){generation+=1;restoreTask?.cancel();persist();loading?.cancel();stopWatch();document=nil;busy=false;outline=[];searchResults=[];count=0;status="";UserDefaults.standard.removeObject(forKey:"lastDocument")}
     func reload(){guard let u=document?.url else{return};persist();generation+=1;let g=generation;loading?.cancel();loading=Task{let worker=Task.detached(priority:.userInitiated){try ReadingDocument.open(u)};do{let opened=try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()});guard !Task.isCancelled,g==generation else{return};document=opened;watchFile(u);status=""}catch{if !Task.isCancelled,g==generation{status="Reload failed";error=error.localizedDescription}}}}
-    func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page,cfi:cfi,fraction:fraction))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
+    func persist(){guard let u=document?.url,let d=try? JSONEncoder().encode(ReadingPosition(page:page))else{return};UserDefaults.standard.set(d,forKey:"position:"+u.standardizedFileURL.path)}
     func turn(_ d:Int){if case .chm=document?.content{send(d>0 ? "next":"prev");return};page=max(0,min(max(0,count-1),page+d*((spread && isFixed) ? 2:1)));send("page",number:Double(page));persist()}
     func go(_ s:String){guard let n=Double(s),n.isFinite else{return};page=Int(max(0,min(Double(max(0,count-1)),n-1)));send("page",number:Double(page));persist()}
     func sibling(_ delta:Int){guard let u=document?.url,let files=try? FileManager.default.contentsOfDirectory(at:u.deletingLastPathComponent(),includingPropertiesForKeys:nil,options:[.skipsHiddenFiles])else{return};let list=files.filter{Format.detect($0.lastPathComponent) != .unknown}.sorted{$0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)== .orderedAscending};guard let i=list.firstIndex(of:u),list.indices.contains(i+delta)else{return};open(list[i+delta])}
