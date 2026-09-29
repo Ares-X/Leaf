@@ -47,10 +47,10 @@ struct ReadingPosition:Codable{var page=0}
         margin=d.object(forKey:"margin") == nil ? 32:d.double(forKey:"margin")
     }
     func syncAppearancePreferences(){
-        let old="\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)"
+        let oldTypography="\(font)|\(fontSize)|\(lineHeight)|\(margin)",oldTheme=theme
         readPreferences(layout:false)
-        let now="\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)"
-        if old != now{send("style",text:now)}
+        let newTypography="\(font)|\(fontSize)|\(lineHeight)|\(margin)"
+        if oldTypography != newTypography || (oldTheme != theme && (isText || isCHM)){send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}
     }
     var isText:Bool{if case .text=document?.content{return true};return false}
     var isFixed:Bool{guard let d=document else{return false};switch d.content{case .pdf,.pages:return true;default:return false}}
@@ -114,7 +114,7 @@ struct ReadingPosition:Codable{var page=0}
     func setFit(_ v:String){guard supportsFit,["page","width","actual"].contains(v) else{return};fit=v;zoom=1;UserDefaults.standard.set(v,forKey:"fit");send("fit",text:v)}
     func setFlow(_ v:String){guard ["paged","continuous"].contains(v) else{return};flow=v;UserDefaults.standard.set(v,forKey:"flow");if supportsFlow{send("flow",text:v)}}
     func applyTypography(){let d=UserDefaults.standard;d.set(font,forKey:"font");d.set(fontSize,forKey:"fontSize");d.set(lineHeight,forKey:"lineHeight");d.set(margin,forKey:"margin");send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}
-    func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");applyTypography()}
+    func setTheme(_ v:String){theme=v;UserDefaults.standard.set(v,forKey:"theme");if isText || isCHM{send("style",text:"\(font)|\(fontSize)|\(lineHeight)|\(margin)|\(theme)")}}
     func rotate(_ d:Int){guard supportsRotation else{return};rotation=(rotation+d+360)%360;send("rotate",number:Double(d))}
     func bookmark(){guard let u=document?.url else{return};persist();UserDefaults.standard.set(UserDefaults.standard.data(forKey:"position:"+u.standardizedFileURL.path),forKey:"bookmark:"+u.standardizedFileURL.path);status="Bookmark saved"}
     func restoreBookmark(){guard let u=document?.url,let d=UserDefaults.standard.data(forKey:"bookmark:"+u.standardizedFileURL.path),let p=try? JSONDecoder().decode(ReadingPosition.self,from:d)else{return};go(String(p.page+1))}
