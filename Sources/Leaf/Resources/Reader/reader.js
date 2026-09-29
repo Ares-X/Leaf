@@ -79,9 +79,9 @@ const view = document.createElement('foliate-view')
 document.body.append(view)
 let searchID = 0, query = '', hits = [], selected = -1
 const style = value => {
-    const [family='system', size='17', line='1.6', margin='32'] = String(value || '').split('|')
+    const [family='system', size='17', line='1.6', margin='32', theme='system'] = String(value || '').split('|')
     const font = family === 'system' ? '-apple-system,BlinkMacSystemFont,sans-serif' : family
-    view.renderer?.setStyles?.(`body{font-family:${font}!important;font-size:${size}px!important;line-height:${line}!important;padding-inline:${margin}px!important}img,svg{max-width:100%;height:auto}`)
+    const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme:dark)').matches)\n    view.renderer?.setStyles?.(`:root{color-scheme:${dark?'dark':'light'}}body{font-family:${font}!important;font-size:${size}px!important;line-height:${line}!important;padding-inline:${margin}px!important;background:${dark?'#111':'#fff'}!important;color:${dark?'#ddd':'#111'}!important}a{color:${dark?'#8ab4f8':'#06c'}!important}img,svg{max-width:100%;height:auto}`)
 }
 window.leafCommand = async command => {
     try {
@@ -91,8 +91,8 @@ window.leafCommand = async command => {
         case 'href': await view.goTo(command.text); break
         case 'fraction': await view.goToFraction(command.number); break
         case 'zoom': {
-            const [family='system',,line='1.6',margin='32'] = String(window.leafStyle || '').split('|')
-            style(`${family}|${17 * command.number}|${line}|${margin}`); break
+            const [family='system',,line='1.6',margin='32',theme='system'] = String(window.leafStyle || '').split('|')
+            style(`${family}|${17 * command.number}|${line}|${margin}|${theme}`); break
         }
         case 'style': window.leafStyle = command.text; style(command.text); break
         case 'spread': view.renderer.setAttribute('max-column-count', String(command.number)); break
@@ -127,7 +127,16 @@ try {
     const meta = await (await fetchOK(`${base}/meta`)).json()
     let book
     if (meta.format === 'chm' || meta.format === 'html' || meta.format === 'markdown') book = await htmlBook(meta, meta.format === 'markdown')
-    else if (meta.name.toLowerCase().endsWith('.epub')) {
+    else if (meta.entries.some(x => /\.opf$/i.test(x.filename))) {
+        const { EPUB } = await import('./foliate/epub.js'), sizes = new Map(meta.entries.map(x => [x.filename, x.size]))
+        book = await new EPUB({
+            entries: meta.entries,
+            loadText: async name => sizes.has(name) ? (await fetchOK(entryURL(name))).text() : null,
+            loadBlob: async (name, type) => sizes.has(name) ? new Blob([await (await fetchOK(entryURL(name))).arrayBuffer()], { type }) : null,
+            getSize: name => sizes.get(name) ?? 0,
+            sha1: async text => new Uint8Array(await (await fetchOK(`${base}/sha1?text=${encodeURIComponent(text)}`)).arrayBuffer()),
+        }).init()
+    } else if (meta.name.toLowerCase().endsWith('.epub')) {
         const { EPUB } = await import('./foliate/epub.js'), sizes = new Map(meta.entries.map(x => [x.filename, x.size]))
         book = await new EPUB({
             entries: meta.entries,

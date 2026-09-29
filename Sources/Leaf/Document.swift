@@ -21,7 +21,7 @@ struct ReadingDocument{
             var d=try Data(contentsOf:url,options:.mappedIfSafe);if format == .palm{d=try LegacyText.palm(d)};if format == .tcr{d=try LegacyText.tcr(d)};return .init(url:url,content:.text(decode(d)))
         case .book,.markdown,.html,.chm:return .init(url:url,content:.book(try BookSource(url,format:format)))
         case .lit:
-            let (temp,epub)=try LitConverter.convert(url);return .init(url:url,content:.book(try BookSource(epub,format:.book)),temporary:temp)
+            let (temp,opf)=try LitConverter.convert(url);return .init(url:url,content:.book(try BookSource(opf,format:.book,root:opf.deletingLastPathComponent())),temporary:temp)
         case .image,.comic,.mupdf,.djvu:return .init(url:url,content:.pages(try Pages(url,format:format)))
         case .postscript:
             let candidates=["/opt/homebrew/bin/gs","/usr/local/bin/gs","/usr/bin/gs"];guard let gs=candidates.first(where:{FileManager.default.isExecutableFile(atPath:$0)})else{throw ReadError("PostScript/PJL needs Ghostscript.")}

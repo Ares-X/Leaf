@@ -26,7 +26,7 @@ actor Pages{
         let scale=NSScreen.main?.backingScaleFactor ?? 2,columns=max(1,state.spread ? 2:1),target=state.fit=="actual" ? 4096:max(128,Int(g.size.width*scale*max(1,state.zoom)/CGFloat(columns)))
         ScrollView(state.flow=="continuous" ? .vertical:[.horizontal,.vertical]){HStack(spacing:state.spread ? 4:0){ForEach(Array((state.rtl ? Array(images.reversed()):images).enumerated()),id:\.offset){_,image in
             let iw=CGFloat(image.width)/scale,ih=CGFloat(image.height)/scale,slotW=g.size.width/CGFloat(columns)
-            Image(decorative:image,scale:scale).resizable().aspectRatio(contentMode:.fit).frame(
+            Image(decorative:image,scale:scale).resizable().aspectRatio(contentMode:.fit).rotationEffect(.degrees(Double(state.rotation))).frame(
                 width:state.fit=="actual" ? iw*CGFloat(state.zoom):state.fit=="width" ? slotW*CGFloat(state.zoom):nil,
                 height:state.fit=="page" ? g.size.height*CGFloat(state.zoom):state.fit=="actual" ? ih*CGFloat(state.zoom):nil)
                 .frame(maxWidth:state.fit=="page" ? slotW*CGFloat(state.zoom):nil)
