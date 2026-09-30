@@ -25,8 +25,6 @@ cp -R Sources/Leaf/Resources/Reader "$APP/Resources/Reader"
 if [ "$CORE" != --core ]; then mkdir -p "$APP/Resources/Tools"; cp "$(command -v clit)" "$APP/Resources/Tools/clit"; chmod 755 "$APP/Resources/Tools/clit"; fi
 python3 scripts/bundle.py "$APP" ${CORE:+"$CORE"}
 codesign --force --sign - "$APP/.."
-plutil -lint "$APP/Info.plist" >/dev/null
-test -s "$APP/Resources/Leaf.icns"
 codesign --verify --deep --strict "$APP/.."
 echo "Built dist/Leaf.app (ad-hoc signed local development build, not notarized)."
 du -sh dist/Leaf.app

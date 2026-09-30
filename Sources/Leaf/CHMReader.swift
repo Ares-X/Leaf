@@ -7,7 +7,7 @@ import LeafCore
 
 actor CHMSource {
     let url: URL
-    let entries: [Archive.Entry]
+    private let entries: [String]
 
     private let chm: NativeFile
     private let index: [String: Int]
@@ -19,11 +19,11 @@ actor CHMSource {
         self.chm = chm
 
         var index: [String: Int] = [:]
-        var entries: [Archive.Entry] = []
+        var entries: [String] = []
         for i in 0..<chm.count {
             let path = String(try chm.path(i).drop(while: { $0 == "/" }))
             index[path.lowercased()] = i
-            entries.append(.init(name: path, size: 0))
+            entries.append(path)
         }
 
         self.index = index
@@ -37,8 +37,7 @@ actor CHMSource {
             return try JSONSerialization.data(
                 withJSONObject: [
                     "name": self.url.lastPathComponent,
-                    "format": "chm",
-                    "entries": entries.map { ["filename": $0.name, "size": $0.size] }
+                    "entries": entries.map { ["filename": $0] }
                 ]
             )
         }
@@ -167,6 +166,7 @@ struct CHMReader: NSViewRepresentable {
         func webView(_ view: WKWebView, start task: WKURLSchemeTask) {
             let id = ObjectIdentifier(task)
             requests[id] = Task { @MainActor in
+                defer { requests.removeValue(forKey: id) }
                 do {
                     guard let url = task.request.url else {
                         throw ReadError("Missing resource URL")
@@ -200,7 +200,7 @@ struct CHMReader: NSViewRepresentable {
                         throw ReadError("Unknown resource host")
                     }
 
-                    guard !Task.isCancelled, requests[id] != nil else { return }
+                    guard !Task.isCancelled else { return }
 
                     let mime = [
                         "js": "text/javascript",
@@ -221,11 +221,10 @@ struct CHMReader: NSViewRepresentable {
                     task.didReceive(data)
                     task.didFinish()
                 } catch {
-                    if !Task.isCancelled, requests[id] != nil {
+                    if !Task.isCancelled {
                         task.didFailWithError(error)
                     }
                 }
-                requests.removeValue(forKey: id)
             }
         }
 

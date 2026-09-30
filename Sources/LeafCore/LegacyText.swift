@@ -43,11 +43,10 @@ public enum LegacyText{
             guard p+4<=raw.count else{throw ReadError("Truncated %MOP table")}
             return raw[p..<p+4].reduce(0){($0<<8)|Int($1)}
         }
-        let tables=try be32(4);guard tables>0,tables<=32 else{throw ReadError("Invalid %MOP table")}
-        var p=8
-        for _ in 0..<tables{_ = try be32(p);p+=4}
+        let tables=try be32(4);guard tables>0,tables<=(raw.count-16)/4 else{throw ReadError("Invalid %MOP table")}
+        let p=8+tables*4
         let offset=try be32(p),length=try be32(p+4)
-        guard length>=5,offset>=0,length>=0,offset<=raw.count,length<=raw.count-offset else{throw ReadError("Invalid %MOP PDF section")}
+        guard length>=5,offset<=raw.count,length<=raw.count-offset else{throw ReadError("Invalid %MOP PDF section")}
         let pdf=raw.subdata(in:offset..<offset+length)
         guard pdf.starts(with:Data("%PDF-".utf8))else{throw ReadError("First %MOP section is not PDF")}
         return pdf

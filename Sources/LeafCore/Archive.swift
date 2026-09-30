@@ -51,7 +51,7 @@ public final class Archive: @unchecked Sendable {
 
     public var images: [String] {
         positions.keys.filter {
-            !$0.split(separator: "/").contains(where: { $0.hasPrefix(".") || $0 == "__MACOSX" })
+            !$0.split(separator: "/").contains(where: { ($0.hasPrefix(".") && $0 != "." && $0 != "..") || $0 == "__MACOSX" })
                 && (Format.detect($0) == .image
                     || ["svg", "jxr", "hdp", "wdp"].contains(($0 as NSString).pathExtension.lowercased()))
         }.sorted { $0.compare($1, options: [.numeric, .caseInsensitive]) == .orderedAscending }
