@@ -47,13 +47,13 @@ const htmlBook = async meta => {
 
 const view = document.createElement('foliate-view')
 document.body.append(view)
-let searchID = 0, query = '', hits = [], selected = -1
+let searchID = 0, query = '', hits = [], selected = -1, zoom = 1
 const scheme=matchMedia('(prefers-color-scheme:dark)')
 const style = value => {
     const [family='system', size='17', line='1.6', margin='32', theme='system'] = String(value || '').split('|')
     const font = family === 'system' ? '-apple-system,BlinkMacSystemFont,sans-serif' : family
     const dark = theme === 'dark' || (theme === 'system' && scheme.matches)
-    view.renderer?.setStyles?.(`:root{color-scheme:${dark?'dark':'light'}}body{font-family:${font}!important;font-size:${size}px!important;line-height:${line}!important;padding-inline:${margin}px!important;background:${dark?'#111':'#fff'}!important;color:${dark?'#ddd':'#111'}!important}a{color:${dark?'#8ab4f8':'#06c'}!important}img,svg{max-width:100%;height:auto}`)
+    view.renderer?.setStyles?.(`:root{color-scheme:${dark?'dark':'light'}}body{font-family:${font}!important;font-size:${Number(size) * zoom}px!important;line-height:${line}!important;padding-inline:${margin}px!important;background:${dark?'#111':'#fff'}!important;color:${dark?'#ddd':'#111'}!important}a{color:${dark?'#8ab4f8':'#06c'}!important}img,svg{max-width:100%;height:auto}`)
 }
 scheme.addEventListener('change',()=>{if(String(window.leafStyle||'').split('|')[4]==='system')style(window.leafStyle)})
 window.leafCommand = async command => {
@@ -62,22 +62,20 @@ window.leafCommand = async command => {
         case 'next': await view.next(); break
         case 'prev': await view.prev(); break
         case 'href': await view.goTo(command.text); break
-        case 'zoom': {
-            const [family='system',size='17',line='1.6',margin='32',theme='system'] = String(window.leafStyle || '').split('|')
-            style(`${family}|${Number(size) * command.number}|${line}|${margin}|${theme}`); break
-        }
+        case 'zoom': zoom = command.number; style(window.leafStyle); break
         case 'style': window.leafStyle = command.text; style(command.text); break
-         case 'toc': post('toc', { items: flatten(view.book.toc) }); break
+        case 'toc': ++searchID; query = ''; hits = []; selected = -1; view.clearSearch(); post('toc', { items: flatten(view.book.toc) }); break
         case 'find': {
             if (!command.text) break
             if (query === command.text && hits.length) { selected = (selected + 1) % hits.length; await view.select(hits[selected].cfi); break }
             const id = ++searchID; query = command.text; hits = []; selected = -1
             post('status', { message: 'Searching…' })
             for await (const result of view.search({ query })) {
-                if (id !== searchID) return
+                if (id !== searchID) { if (!query) view.clearSearch(); return }
                 if (result.subitems) hits.push(...result.subitems)
                 if (hits.length >= 200) { hits = hits.slice(0, 200); break }
             }
+            if (id !== searchID) return
             post('status', { message: `${hits.length}${hits.length >= 200 ? '+' : ''} matches` })
             post('results', { items: hits.map(hit => ({ title: `${hit.excerpt?.pre ?? ''}${hit.excerpt?.match ?? ''}${hit.excerpt?.post ?? ''}`, target: hit.cfi, depth: 0 })) })
             if (hits.length) { selected = 0; await view.select(hits[0].cfi) }
@@ -99,7 +97,7 @@ try {
     await view.open(book)
     style(window.leafStyle)
     post('toc', { items: flatten(book.toc) })
-    await view.init()
+    await view.init({})
     post('ready')
 } catch (error) { post('error', { message: error.message }) }
 window.addEventListener('pagehide', () => { ++searchID; view.close() })

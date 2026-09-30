@@ -13,10 +13,7 @@ checkout() {
 mkdir -p build/deps Sources/Leaf/Resources/Reader/foliate
 checkout https://github.com/johnfactotum/foliate-js.git "$FOLIATE" "$ROOT/build/deps/foliate"
 DEST=Sources/Leaf/Resources/Reader
-# CHM needs Foliate's view/renderer only; ebook parsers are handled by MuPDF.
-for file in view.js paginator.js fixed-layout.js utils.js; do
-    cp "build/deps/foliate/$file" "$DEST/foliate/$file"
-done
-cp build/deps/foliate/LICENSE "$DEST/foliate/LICENSE"
+# Follow the renderer's static imports and its explicit dynamic renderer/search entries.
+python3 scripts/prepare-reader.py "$ROOT/build/deps/foliate" "$DEST/foliate"
 printf 'foliate=%s\n' "$FOLIATE" > "$DEST/versions.txt"
 echo "Reader dependencies prepared. Subsequent builds reuse their local copies."
