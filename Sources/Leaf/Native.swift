@@ -3,7 +3,8 @@ import AppKit
 import Darwin
 import LeafCore
 
-/// A tiny ABI, not a plug-in framework. Libraries load only when their format is opened.
+enum NativeEngine:String{case mupdf="MuPDF",djvu="DjVu",chm="CHM",jpegXL="JPEGXL"}
+
 final class NativeFile {
     typealias Open = @convention(c) (UnsafePointer<CChar>, UnsafeMutablePointer<CChar>) -> UnsafeMutableRawPointer?
     typealias Close = @convention(c) (UnsafeMutableRawPointer) -> Void
@@ -15,19 +16,24 @@ final class NativeFile {
     private let textFn:UnsafeMutableRawPointer?,pathFn:UnsafeMutableRawPointer?,readFn:UnsafeMutableRawPointer?,relayoutFn:UnsafeMutableRawPointer?
     let count:Int
 
-    init(_ url: URL, engine: String) throws {
-        let candidates = [Bundle.main.privateFrameworksURL, URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent("build/engines")].compactMap { $0?.appendingPathComponent(engine + ".dylib").path }
-        let path = candidates.first { FileManager.default.fileExists(atPath: $0) } ?? candidates[0]
+    init(_ url: URL, engine: NativeEngine) throws {
+        let name=engine.rawValue+".dylib"
+        let path:String
+        if Bundle.main.bundleURL.pathExtension=="app",let frameworks=Bundle.main.privateFrameworksURL{
+            path=frameworks.appendingPathComponent(name).path
+        }else{
+            path=URL(fileURLWithPath:FileManager.default.currentDirectoryPath).appendingPathComponent("build/engines").appendingPathComponent(name).path
+        }
+        guard FileManager.default.fileExists(atPath:path) else{throw ReadError("\(engine.rawValue) engine is missing. Run scripts/build-engines.sh.")}
         guard let library = dlopen(path, RTLD_LOCAL | RTLD_NOW) else {
-            throw ReadError("\(engine) engine is missing. Build Leaf with scripts/build-engines.sh, then rebuild the app.")
+            let reason=dlerror().map{String(cString:$0)} ?? "unknown loader error"
+            throw ReadError("Cannot load \(engine.rawValue): \(reason)")
         }
         func symbol<T>(_ name: String, _: T.Type) throws -> T {
             guard let p = dlsym(library, name) else { throw ReadError("Incompatible \(engine) engine: \(name)") }
             return unsafeBitCast(p, to: T.self)
         }
         do {
-            let abi = try symbol("lf_abi", (@convention(c) () -> Int32).self)
-            guard abi() == 1 else { throw ReadError("Incompatible engine ABI") }
             let open = try symbol("lf_open", Open.self), close = try symbol("lf_close", Close.self)
             let pageCount = try symbol("lf_count", Count.self)
             var error = [CChar](repeating: 0, count: 512)
@@ -45,7 +51,7 @@ final class NativeFile {
         }
         let w = Int(info[0]), h = Int(info[1]), stride = Int(info[2]), channels = Int(info[3])
         guard w>0,h>0,[3,4].contains(channels),w<=Int.max/channels,stride>=w*channels,stride<=Int.max/h else{free(p);throw ReadError("Invalid page bitmap")}
-        let bytes=stride*h;guard bytes<=512*1024*1024 else{free(p);throw ReadError("Page bitmap is too large")}
+        let bytes=stride*h
         let data=Data(bytesNoCopy:p,count:bytes,deallocator:.free)
         guard let provider = CGDataProvider(data: data as CFData),
               let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: channels * 8,
@@ -78,7 +84,7 @@ final class NativeFile {
     func data(_ index: Int) throws -> Data {
         typealias Get = @convention(c) (UnsafeMutableRawPointer, Int32, UnsafeMutablePointer<Int>) -> UnsafeMutableRawPointer?
         var size = 0
-        guard let fn=readFn else{throw ReadError("Missing CHM read API")};let get=unsafeBitCast(fn,to:Get.self);guard let p=get(document,Int32(index),&size) else{throw ReadError("Cannot read CHM entry")};guard size>=0,size<=512*1024*1024 else{free(p);throw ReadError("CHM entry is too large")}
+        guard let fn=readFn else{throw ReadError("Missing CHM read API")};let get=unsafeBitCast(fn,to:Get.self);guard let p=get(document,Int32(index),&size) else{throw ReadError("Cannot read CHM entry")};guard size>=0 else{free(p);throw ReadError("Invalid CHM entry size")}
         return Data(bytesNoCopy:p,count:size,deallocator:.free)
     }
 }

@@ -35,23 +35,17 @@ public final class Archive:@unchecked Sendable{
         cursor=nil;cursorIndex = -1
     }
 
-    public static func isSafeEntryName(_ name:String)->Bool{
-        let normalized=name.replacingOccurrences(of:"\\",with:"/")
-        return !normalized.hasPrefix("/") && !normalized.split(separator:"/").contains("..")
-    }
-
     public func contains(_ name:String)->Bool{entries.contains{$0.name.caseInsensitiveCompare(name) == .orderedSame}}
 
     public var images:[String]{
         positions.keys.filter{
-            Self.isSafeEntryName($0) &&
-            !$0.split(separator:"/").contains(where:{$0.hasPrefix(".") || $0 == "__MACOSX"}) &&
+!$0.split(separator:"/").contains(where:{$0.hasPrefix(".") || $0 == "__MACOSX"}) &&
             (Format.detect($0) == .image || ["svg","jxr","hdp","wdp"].contains(($0 as NSString).pathExtension.lowercased()))
         }.sorted{$0.compare($1,options:[.numeric,.caseInsensitive]) == .orderedAscending}
     }
 
     public func data(_ name:String)throws->Data{
-        guard Self.isSafeEntryName(name),let target=positions[name] else{throw ReadError("Archive entry not found: \(name)")}
+        guard let target=positions[name] else{throw ReadError("Archive entry not found: \(name)")}
         lock.lock();defer{lock.unlock()}
         do{
         if cursor == nil || target <= cursorIndex{resetCursor();cursor=try Self.open(url)}
@@ -62,14 +56,14 @@ public final class Archive:@unchecked Sendable{
             guard archive_entry_filetype(entry)==0o100000,archive_entry_pathname_utf8(entry) ?? archive_entry_pathname(entry) != nil else{archive_read_data_skip(cursor);continue}
             cursorIndex += 1
             guard cursorIndex == target else{archive_read_data_skip(cursor);continue}
-            let expected=archive_entry_size(entry);guard expected>=0,expected<=512*1024*1024 else{throw ReadError("Archive entry is too large")}
+            let expected=archive_entry_size(entry);guard expected>=0,expected<=Int64(LeafLimits.maxDecodedBytes) else{throw ReadError("Archive entry is too large")}
             var result=Data();result.reserveCapacity(Int(min(expected,64*1024)));var buffer=[UInt8](repeating:0,count:64*1024)
             while true{
                 try Task.checkCancellation()
                 let n=archive_read_data(cursor,&buffer,buffer.count)
                 if n==0{return result}
                 guard n>0 else{throw Self.error(cursor)}
-                guard result.count<=512*1024*1024-n else{throw ReadError("Archive entry is too large")}
+                guard result.count<=LeafLimits.maxDecodedBytes-n else{throw ReadError("Archive entry is too large")}
                 result.append(contentsOf:buffer.prefix(n))
             }
         }

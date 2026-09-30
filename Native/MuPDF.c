@@ -59,7 +59,7 @@ API unsigned char *lf_render(Document *d, int page, int width, int *info, char *
         info[0] = fz_pixmap_width(d->ctx, pix); info[1] = fz_pixmap_height(d->ctx, pix);
         info[2] = fz_pixmap_stride(d->ctx, pix); info[3] = fz_pixmap_components(d->ctx, pix);
         if(info[0]<=0||info[1]<=0||info[2]<=0||(size_t)info[1]>SIZE_MAX/(size_t)info[2]) fz_throw(d->ctx,FZ_ERROR_GENERIC,"Invalid page bitmap");
-        size_t size=(size_t)info[2]*(size_t)info[1]; if(size>512u*1024u*1024u) fz_throw(d->ctx,FZ_ERROR_GENERIC,"Page bitmap is too large"); out=malloc(size);
+        size_t size=(size_t)info[2]*(size_t)info[1]; if(size>LEAF_MAX_DECODED_BYTES) fz_throw(d->ctx,FZ_ERROR_GENERIC,"Page bitmap is too large"); out=malloc(size);
         if (!out) fz_throw(d->ctx, FZ_ERROR_GENERIC, "Cannot allocate page bitmap");
         memcpy(out, fz_pixmap_samples(d->ctx, pix), size);
     }

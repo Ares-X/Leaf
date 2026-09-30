@@ -7,7 +7,7 @@ API int lf_count(Document *d) { (void)d; return 1; }
 API Document *lf_open(const char *path, char *error) {
     FILE *f = fopen(path, "rb"); if (!f) return NULL;
     fseek(f, 0, SEEK_END); long size = ftell(f); rewind(f);
-    if (size <= 0 || (unsigned long)size > 512u*1024u*1024u) { if(error) snprintf(error,512,"JPEG XL file is too large or empty"); fclose(f); return NULL; }
+    if (size <= 0) { if(error) snprintf(error,512,"JPEG XL file is empty"); fclose(f); return NULL; }
     unsigned char *bytes = malloc((size_t)size);
     if (!bytes || fread(bytes, 1, (size_t)size, f) != (size_t)size) { fclose(f); free(bytes); return NULL; }
     fclose(f);
@@ -25,7 +25,7 @@ API Document *lf_open(const char *path, char *error) {
         } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
             size_t n;
             if (JxlDecoderImageOutBufferSize(decoder, &format, &n) != JXL_DEC_SUCCESS) break;
-            if(n>512u*1024u*1024u){snprintf(error,512,"JPEG XL image is too large");break;}d->pixels=malloc(n);
+            if(n>LEAF_MAX_DECODED_BYTES){snprintf(error,512,"JPEG XL image is too large");break;}d->pixels=malloc(n);
             if (!d->pixels || JxlDecoderSetImageOutBuffer(decoder, &format, d->pixels, n) != JXL_DEC_SUCCESS) break;
         } else if (status == JXL_DEC_FULL_IMAGE) { ok = 1; break; }
         else if (status == JXL_DEC_ERROR || status == JXL_DEC_NEED_MORE_INPUT || status == JXL_DEC_SUCCESS) break;

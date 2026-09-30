@@ -79,14 +79,12 @@ brew install pkgconf djvulibre chmlib jpeg-xl convertlit
 open dist/Leaf.app
 ```
 
-The first build checks out pinned Foliate and MuPDF revisions, builds the selective MuPDF library, and bundles only linked decoder dylibs. Later builds reuse downloads and incremental outputs.
-Homebrew library versions/build receipts are recorded in the bundle; those
-three dependencies are not fully pinned yet. The result is a local ad-hoc signed bundle. The build script runs portable tests, validates Info.plist and icon output, then performs a strict deep code-signature verification. It is **not a notarized or redistribution-audited release**. A public binary
+Foliate's eight CHM renderer/search modules are vendored at the pinned revision. The first full build only fetches/builds the pinned MuPDF source and bundles linked decoder dylibs. Homebrew decoder versions are development inputs and are not yet pinned for redistribution. The result is a local ad-hoc signed bundle. The build script runs portable tests, validates Info.plist and icon output, then performs a strict deep code-signature verification. It is **not a notarized or redistribution-audited release**. A public binary
 release must also supply the corresponding dependency sources and license notices.
 
 ```sh
 ./scripts/build-app.sh --core  # omit MuPDF/DjVu/CHM/JXL; fewer formats, not full parity
-./scripts/run-dev.sh           # prepare JS resources, then swift run
+./scripts/run-dev.sh           # build the app bundle and launch a fresh instance
 swift test                    # portable core routing/archive/legacy/chapter checks; also works on Linux
 ```
 

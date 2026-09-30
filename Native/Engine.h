@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <stdint.h>
+#include <limits.h>
 #define API __attribute__((visibility("default")))
-// All returned byte buffers are malloc-owned. A document stays on one serial worker.
-API int lf_abi(void) { return 1; }
+#define LEAF_MAX_DECODED_BYTES ((size_t)512u*1024u*1024u)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-./scripts/bootstrap.sh
-swift run Leaf
+./scripts/build-app.sh "$@"
+open -n dist/Leaf.app

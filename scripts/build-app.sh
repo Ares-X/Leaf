@@ -4,9 +4,8 @@ cd "$(dirname "$0")/.."
 [ "$(uname -s)" = Darwin ] || { echo "The .app requires the macOS SDK; swift test works on Linux." >&2; exit 1; }
 CORE="${1:-}"
 [ -z "$CORE" ] || [ "$CORE" = --core ] || { echo "Usage: $0 [--core]" >&2; exit 1; }
-# Full builds prepare the CHM renderer and native engines; --core stays dependency-light.
+# Full builds compile native engines; CHM renderer modules are vendored in Resources.
 if [ "$CORE" != --core ]; then
-    ./scripts/bootstrap.sh
     command -v clit >/dev/null || { echo "Install build dependency: brew install convertlit" >&2; exit 1; }
     ./scripts/build-engines.sh
 fi

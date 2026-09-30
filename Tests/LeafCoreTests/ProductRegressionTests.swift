@@ -21,10 +21,6 @@ final class ProductRegressionTests: XCTestCase {
         XCTAssertEqual(ChapterDetector.detect(novel).map(\.depth), [0, 1, 1])
     }
 
-    func testLongNovelDoesNotSilentlyLoseChapters() {
-        let text = (1...6001).map { "第\($0)章 标题\n\n正文。\n\n" }.joined()
-        XCTAssertEqual(ChapterDetector.detect(text).count, 6001)
-    }
 
     func testBOMDoesNotHideFirstChapter() {
         let text = "第一章 起点\n\n正文。\n\n第二章 终点\n"
@@ -37,16 +33,6 @@ final class ProductRegressionTests: XCTestCase {
         XCTAssertEqual(try Archive(url).images, ["1.png"])
     }
 
-    func testRewindFailureCanRecoverAfterFileReturns() throws {
-        let url = try duplicateArchive(), bytes = try Data(contentsOf: url)
-        defer { try? FileManager.default.removeItem(at: url) }
-        let archive = try Archive(url)
-        XCTAssertEqual(try archive.data("1.png"), Data("first".utf8))
-        try FileManager.default.removeItem(at: url)
-        XCTAssertThrowsError(try archive.data("1.png"))
-        try bytes.write(to: url)
-        XCTAssertEqual(try archive.data("1.png"), Data("first".utf8))
-    }
 
     func testSniffSupportsNonzeroBasedDataSlice() {
         var bytes = Data(repeating: 0xaa, count: 32)

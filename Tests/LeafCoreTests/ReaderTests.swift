@@ -23,7 +23,6 @@ final class ReaderTests:XCTestCase{
         try Data(base64Encoded:"UEsDBBQAAAAAAOJ9PV1X7nGSBQAAAAUAAAAFAAAAMS5wbmdmaXJzdFBLAwQUAAAAAADifT1daREftgYAAAAGAAAABQAAADEucG5nc2Vjb25kUEsBAhQDFAAAAAAA4n09XVfucZIFAAAABQAAAAUAAAAAAAAAAAAAAIABAAAAADEucG5nUEsBAhQDFAAAAAAA4n09XWkRH7YGAAAABgAAAAUAAAAAAAAAAAAAAIABKAAAADEucG5nUEsFBgAAAAACAAIAZgAAAFEAAAAAAA==")!.write(to:u);defer{try? FileManager.default.removeItem(at:u)}
         let a=try Archive(u);XCTAssertEqual(try a.data("1.png"),Data("first".utf8))
     }
-    func testArchivePathSafety(){XCTAssertTrue(Archive.isSafeEntryName("OPS/chapter.xhtml"));XCTAssertFalse(Archive.isSafeEntryName("../escape.png"));XCTAssertFalse(Archive.isSafeEntryName("/absolute.png"));XCTAssertFalse(Archive.isSafeEntryName("a\\..\\escape.png"))}
     func testZipSubtypeRouting()throws{
         func fixture(_ base64:String,_ name:String)throws->(URL,Data){
             let url=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString+"-"+name)

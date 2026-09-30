@@ -33,6 +33,4 @@ for name in MuPDF DjVu CHM JPEGXL; do
     install_name_tool -id "@rpath/$name.dylib" "$OUT/$name.dylib"
     strip -x "$OUT/$name.dylib"
 done
-brew info --json=v2 djvulibre chmlib jpeg-xl > "$ROOT/build/native-dependencies.json"
-printf '%s\n' "$REV" > "$ROOT/build/mupdf-revision.txt"
-echo "Built four on-demand engines. Run scripts/build-app.sh to make a self-contained bundle."
+echo "Built four on-demand engines."
