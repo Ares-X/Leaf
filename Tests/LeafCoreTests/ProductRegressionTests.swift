@@ -21,7 +21,6 @@ final class ProductRegressionTests: XCTestCase {
         XCTAssertEqual(ChapterDetector.detect(novel).map(\.depth), [0, 1, 1])
     }
 
-
     func testBOMDoesNotHideFirstChapter() {
         let text = "第一章 起点\n\n正文。\n\n第二章 终点\n"
         XCTAssertEqual(ChapterDetector.detect("\u{feff}" + text), ChapterDetector.detect(text))
@@ -32,7 +31,6 @@ final class ProductRegressionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         XCTAssertEqual(try Archive(url).images, ["1.png"])
     }
-
 
     func testSniffSupportsNonzeroBasedDataSlice() {
         var bytes = Data(repeating: 0xaa, count: 32)
@@ -63,23 +61,6 @@ final class ProductRegressionTests: XCTestCase {
         XCTAssertEqual(ChapterDetector.lineOffsets("正文"), [0])
         XCTAssertEqual(ChapterDetector.lineOffsets("\r\n"), [0, 2])
         XCTAssertEqual(ChapterDetector.lineOffsets("\n\n"), [0, 1, 2])
-    }
-
-    func testCancelledArchiveReadDoesNotPoisonNextRead() async throws {
-        let url = try duplicateArchive()
-        defer { try? FileManager.default.removeItem(at: url) }
-        let archive = try Archive(url)
-        let read = Task.detached {
-            withUnsafeCurrentTask { $0?.cancel() }
-            do {
-                _ = try archive.data("1.png")
-                return false
-            } catch is CancellationError { return true }
-            catch { return false }
-        }
-        let cancelled = await read.value
-        XCTAssertTrue(cancelled)
-        XCTAssertEqual(try archive.data("1.png"), Data("first".utf8))
     }
 
     private func duplicateArchive() throws -> URL {

@@ -76,7 +76,6 @@ struct ReadingPosition:Codable{var page=0}
     func send(_ action:ReaderAction){command = .init(revision:command.revision &+ 1,action:action)}
     func showFindPanel(){guard supportsSearch else{return};showFind=true}
     func closeFind(){showFind=false;status="";send(.toc)}
-    func toggleFind(){showFind ? closeFind():showFindPanel()}
     func chooseFile(){let p=NSOpenPanel();p.canChooseDirectories=true;p.begin{[weak self] r in if r == .OK,let u=p.url{self?.open(u)}}}
     func open(_ url:URL){
         persist();generation+=1;let g=generation;loading?.cancel();busy=true;error=nil;status="Opening \(url.lastPathComponent)…"
