@@ -89,6 +89,8 @@ extension ReaderState {
     var supportsSearch: Bool { isPDF || isText || isCHM || searchable }
     var hasDocument: Bool { document != nil }
     var canTurn: Bool { isCHM ? hasDocument : count > 1 }
+    var canGoBackward: Bool { isCHM ? hasDocument : page > 0 && count > 0 }
+    var canGoForward: Bool { isCHM ? hasDocument : page < count - 1 }
     var canSaveCopy: Bool { document?.url.hasDirectoryPath == false }
 
     var printsCurrentPageOnly: Bool {
@@ -206,66 +208,20 @@ extension ReaderState {
     }
 
     func open(_ url: URL) {
-        persist()
-        generation += 1
-        let currentGeneration = generation
-        loading?.cancel()
-        busy = true
-        error = nil
-        status = "Opening \(url.lastPathComponent)…"
-
-        loading = Task {
-            let worker = Task.detached(priority: .userInitiated) {
-                try ReadingDocument.open(url)
-            }
-            do {
-                let opened = try await withTaskCancellationHandler(
-                    operation: { try await worker.value },
-                    onCancel: { worker.cancel() }
-                )
-                guard !Task.isCancelled, currentGeneration == generation else { return }
-
-                command = ReaderCommand()
-                readPreferences()
-                outline = []
-                outlineBusy = false
-                showFind = false
-                page = 0
-                count = 0
-                zoom = 1
-                rotation = 0
-                reflowable = false
-                searchable = false
-                renderRevision = 0
-
-                if let data = UserDefaults.standard.data(forKey: "position:" + url.standardizedFileURL.path),
-                   let position = try? JSONDecoder().decode(ReadingPosition.self, from: data)
-                {
-                    page = max(0, position.page)
-                }
-
-                document = opened
-                busy = false
-                status = ""
-                watchFile(url)
-                NSDocumentController.shared.noteNewRecentDocumentURL(url)
-            } catch {
-                if !Task.isCancelled, currentGeneration == generation {
-                    self.error = error.localizedDescription
-                    busy = false
-                    status = ""
-                }
-            }
-        }
+        load(url.standardizedFileURL, reloading: false)
     }
 
     func close() {
         generation += 1
         persist()
         loading?.cancel()
+        loading = nil
         stopWatch()
         document = nil
         busy = false
+        error = nil
+        page = 0
+        command = ReaderCommand()
         outline = []
         outlineBusy = false
         showFind = false
@@ -278,41 +234,7 @@ extension ReaderState {
 
     func reload() {
         guard !busy, let url = document?.url else { return }
-        persist()
-        generation += 1
-        let currentGeneration = generation
-        loading?.cancel()
-        busy = true
-        status = "Reloading…"
-
-        loading = Task {
-            let worker = Task.detached(priority: .userInitiated) {
-                try ReadingDocument.open(url)
-            }
-            do {
-                let opened = try await withTaskCancellationHandler(
-                    operation: { try await worker.value },
-                    onCancel: { worker.cancel() }
-                )
-                guard !Task.isCancelled, currentGeneration == generation else { return }
-
-                command = ReaderCommand()
-                outline = []
-                outlineBusy = false
-                reflowable = false
-                searchable = false
-                document = opened
-                busy = false
-                watchFile(url)
-                status = ""
-            } catch {
-                if !Task.isCancelled, currentGeneration == generation {
-                    busy = false
-                    status = ""
-                    self.error = error.localizedDescription
-                }
-            }
-        }
+        load(url, reloading: true)
     }
 
     func persist() {
@@ -401,11 +323,76 @@ extension ReaderState {
         persist()
         generation += 1
         loading?.cancel()
+        loading = nil
         stopWatch()
     }
 }
 
 private extension ReaderState {
+    func load(_ url: URL, reloading: Bool) {
+        persist()
+        generation &+= 1
+        let currentGeneration = generation
+        loading?.cancel()
+        reloadTask?.cancel()
+        reloadTask = nil
+        busy = true
+        error = nil
+        status = reloading ? "Reloading…" : "Opening \(url.lastPathComponent)…"
+
+        loading = Task {
+            let worker = Task.detached(priority: .userInitiated) {
+                let opened = try ReadingDocument.open(url)
+                try Task.checkCancellation()
+                return opened
+            }
+            do {
+                let opened = try await withTaskCancellationHandler(
+                    operation: { try await worker.value },
+                    onCancel: { worker.cancel() }
+                )
+                guard !Task.isCancelled, currentGeneration == generation else { return }
+
+                // The old document stays readable while loading. Save its latest position.
+                persist()
+                if !reloading {
+                    readPreferences()
+                    zoom = 1
+                    rotation = 0
+                    page = 0
+                    if let data = UserDefaults.standard.data(forKey: "position:" + opened.url.path),
+                       let position = try? JSONDecoder().decode(ReadingPosition.self, from: data) {
+                        page = max(0, position.page)
+                    }
+                }
+                command = ReaderCommand()
+                outline = []
+                outlineBusy = false
+                showFind = false
+                count = 0
+                reflowable = false
+                searchable = false
+                renderRevision = 0
+                document = opened
+                busy = false
+                status = ""
+                loading = nil
+                watchFile(opened.url)
+                if !reloading {
+                    NSDocumentController.shared.noteNewRecentDocumentURL(opened.url)
+                }
+            } catch {
+                guard !Task.isCancelled, currentGeneration == generation else { return }
+                busy = false
+                status = ""
+                self.error = error.localizedDescription
+                loading = nil
+                // Atomic replacement may have invalidated the previous file descriptor.
+                if let url = document?.url { watchFile(url) }
+            }
+        }
+    }
+
     func readPreferences() {
         let defaults = UserDefaults.standard
         fit = defaults.string(forKey: "fit") ?? "page"

@@ -30,9 +30,10 @@ final class TemporaryDirectory {
     }
 }
 
-struct ReadingDocument {
+struct ReadingDocument: Identifiable {
+    let id = UUID()
     enum Content {
-        case pdf(URL, Data?)
+        case pdf(PDFDocument)
         case text(String)
         case chm(CHMSource)
         case pages(Pages)
@@ -63,14 +64,14 @@ struct ReadingDocument {
 
         switch format {
         case .pdf:
-            return .init(url: url, content: .pdf(url, nil))
+            return .init(url: url, content: .pdf(try readPDF(url)))
 
         case .replica:
             let data = try LegacyText.palm(
                 Data(contentsOf: url, options: .mappedIfSafe),
                 replica: true
             )
-            return .init(url: url, content: .pdf(url, data))
+            return .init(url: url, content: .pdf(try readPDF(url, data: data)))
 
         case .text:
             return .init(
@@ -114,6 +115,20 @@ struct ReadingDocument {
         default:
             throw ReadError("Unsupported document: \(url.lastPathComponent)")
         }
+    }
+
+    // Parse once on the loading task. A failed reload must not replace a readable document.
+    private static func readPDF(_ url: URL, data: Data? = nil) throws -> PDFDocument {
+        let document: PDFDocument?
+        if let data {
+            document = PDFDocument(data: data)
+        } else {
+            document = PDFDocument(url: url)
+        }
+        guard let document, document.isLocked || document.pageCount > 0 else {
+            throw ReadError("Cannot read PDF: \(url.lastPathComponent)")
+        }
+        return document
     }
 
     static func decode(_ data: Data) -> String {
@@ -182,7 +197,7 @@ struct ReadingDocument {
             throw ReadError("Ghostscript could not convert this file.")
         }
 
-        return .init(url: url, content: .pdf(output, nil), temporary: temporary)
+        return .init(url: url, content: .pdf(try readPDF(output)), temporary: temporary)
     }
 }
 #endif

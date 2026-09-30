@@ -9,6 +9,7 @@ let package = Package(
         .target(name: "LeafCore", dependencies: ["CArchive"]),
         .executableTarget(name: "Leaf", dependencies: ["LeafCore"],
                           resources: [.copy("Resources/Reader")]),
-        .testTarget(name: "LeafCoreTests", dependencies: ["LeafCore"])
+        .testTarget(name: "LeafCoreTests", dependencies: ["LeafCore"]),
+        .testTarget(name: "LeafAppTests", dependencies: ["Leaf"])
     ]
 )
