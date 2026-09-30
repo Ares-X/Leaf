@@ -90,8 +90,8 @@ public final class Archive: @unchecked Sendable {
 
                 let maxBytes = Int(LEAF_MAX_DECODED_BYTES)
                 let expected = archive_entry_size(entry)
-                guard expected >= 0, expected <= Int64(maxBytes) else {
-                    throw ReadError("Archive entry is too large")
+                guard expected >= 0 else {
+                    throw ReadError("Archive entry has an invalid size")
                 }
 
                 var result = Data()

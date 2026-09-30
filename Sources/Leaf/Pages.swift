@@ -5,7 +5,6 @@ import ImageIO
 import LeafCore
 
 actor Pages{
-    private static let nativeImageExtensions:Set<String>=["jxl","jxr","hdp","wdp","svg"]
     private let archive:Archive?
     private let names:[String]
     private let url:URL
@@ -53,17 +52,14 @@ actor Pages{
         }else{
             let name=names[page],ext=(name as NSString).pathExtension.lowercased()
             if let engine=Self.engine(forImageExtension:ext){
-                let file:URL
-                var temp:TemporaryDirectory?
-                if url.hasDirectoryPath{file=url.appendingPathComponent(name)}
-                else{
-                    let value=try archive!.data(name)
-                    let directory=try TemporaryDirectory();temp=directory
-                    file=directory.url.appendingPathComponent(URL(fileURLWithPath:name).lastPathComponent)
-                    try value.write(to:file)
+                if url.hasDirectoryPath{
+                    image=try NativeFile(url.appendingPathComponent(name),engine:engine).image(0,width:width)
+                }else{
+                    let directory=try TemporaryDirectory()
+                    let file=directory.url.appendingPathComponent(URL(fileURLWithPath:name).lastPathComponent)
+                    try archive!.data(name).write(to:file)
+                    image=try NativeFile(file,engine:engine).image(0,width:width)
                 }
-                _=temp
-                image=try NativeFile(file,engine:engine).image(0,width:width)
             }else{
                 let data=try archive.map{try $0.data(name)} ?? Data(contentsOf:url.appendingPathComponent(name))
                 guard let source=CGImageSourceCreateWithData(data as CFData,[kCGImageSourceShouldCache:false] as CFDictionary) else{throw ReadError("ImageIO cannot read \(name)")}
@@ -76,7 +72,7 @@ actor Pages{
     }
 
     private static func isComicImage(_ name:String)->Bool{
-        Format.detect(name) == .image || nativeImageExtensions.contains((name as NSString).pathExtension.lowercased())
+        Format.detect(name) == .image || engine(forImageExtension:(name as NSString).pathExtension.lowercased()) != nil
     }
     private static func engine(forImageExtension ext:String)->NativeEngine?{
         ext=="jxl" ? .jpegXL:(["jxr","hdp","wdp","svg"].contains(ext) ? .mupdf:nil)

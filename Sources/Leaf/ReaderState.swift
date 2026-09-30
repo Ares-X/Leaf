@@ -86,11 +86,6 @@ extension ReaderState {
         return false
     }
 
-    var supportsFlow: Bool { isFixed }
-    var supportsSpread: Bool { isFixed }
-    var supportsRTL: Bool { isFixed }
-    var supportsFit: Bool { isFixed }
-    var supportsRotation: Bool { isFixed }
     var supportsSearch: Bool { isPDF || isText || isCHM || searchable }
     var hasDocument: Bool { document != nil }
     var canTurn: Bool { isCHM ? hasDocument : count > 1 }
@@ -133,7 +128,6 @@ extension ReaderState {
     }
 
     func showFindPanel() {
-        guard supportsSearch else { return }
         showFind = true
     }
 
@@ -170,7 +164,6 @@ extension ReaderState {
     }
 
     func setFit(_ value: String) {
-        guard supportsFit, ["page", "width", "actual"].contains(value) else { return }
         fit = value
         zoom = 1
         UserDefaults.standard.set(value, forKey: "fit")
@@ -178,7 +171,6 @@ extension ReaderState {
     }
 
     func setFlow(_ value: String) {
-        guard ["paged", "continuous"].contains(value) else { return }
         flow = value
         UserDefaults.standard.set(value, forKey: "flow")
     }
@@ -199,7 +191,6 @@ extension ReaderState {
     }
 
     func rotate(_ degrees: Int) {
-        guard supportsRotation else { return }
         rotation = (rotation + degrees + 360) % 360
         send(.rotate(degrees))
     }

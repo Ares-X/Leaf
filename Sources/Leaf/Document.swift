@@ -3,49 +3,186 @@ import AppKit
 import PDFKit
 import LeafCore
 
-func runLeafProcess(_ process:Process)throws{
+func runLeafProcess(_ process: Process) throws {
     try Task.checkCancellation()
     try process.run()
-    while process.isRunning{if Task.isCancelled{process.terminate();process.waitUntilExit();throw CancellationError()};Thread.sleep(forTimeInterval:0.05)}
-    process.waitUntilExit()
+
+    while process.isRunning {
+        if Task.isCancelled {
+            process.terminate()
+            process.waitUntilExit()
+            throw CancellationError()
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+    }
 }
 
-final class TemporaryDirectory{let url=FileManager.default.temporaryDirectory.appendingPathComponent("Leaf-"+UUID().uuidString,isDirectory:true);init()throws{try FileManager.default.createDirectory(at:url,withIntermediateDirectories:true)};deinit{try? FileManager.default.removeItem(at:url)}}
+final class TemporaryDirectory {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("Leaf-" + UUID().uuidString, isDirectory: true)
 
-struct ReadingDocument{
-    enum Content{case pdf(URL,Data?),text(String),chm(CHMSource),pages(Pages)}
-    let url:URL,content:Content,temporary:TemporaryDirectory?
-    init(url:URL,content:Content,temporary:TemporaryDirectory?=nil){self.url=url;self.content=content;self.temporary=temporary}
-    static func open(_ url:URL)throws->ReadingDocument{
+    init() throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: url)
+    }
+}
+
+struct ReadingDocument {
+    enum Content {
+        case pdf(URL, Data?)
+        case text(String)
+        case chm(CHMSource)
+        case pages(Pages)
+    }
+
+    let url: URL
+    let content: Content
+    let temporary: TemporaryDirectory?
+
+    init(url: URL, content: Content, temporary: TemporaryDirectory? = nil) {
+        self.url = url
+        self.content = content
+        self.temporary = temporary
+    }
+
+    static func open(_ url: URL) throws -> ReadingDocument {
         try Task.checkCancellation()
-        if (try? url.resourceValues(forKeys:[.isDirectoryKey]).isDirectory)==true{let f=URL(fileURLWithPath:url.path,isDirectory:true);return .init(url:f,content:.pages(try Pages(f,format:.comic)))}
-        let fh=try FileHandle(forReadingFrom:url);defer{try? fh.close()}
-        let prefix=try fh.read(upToCount:2048) ?? Data()
-        let format=try Format.resolve(url,prefix:prefix)
 
-        switch format{
-        case .pdf:return .init(url:url,content:.pdf(url,nil))
-        case .replica:return .init(url:url,content:.pdf(url,try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe),replica:true)))
-        case .text:return .init(url:url,content:.text(decode(try Data(contentsOf:url,options:.mappedIfSafe))))
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            let folder = URL(fileURLWithPath: url.path, isDirectory: true)
+            return .init(url: folder, content: .pages(try Pages(folder, format: .comic)))
+        }
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let prefix = try handle.read(upToCount: 2048) ?? Data()
+        let format = try Format.resolve(url, prefix: prefix)
+
+        switch format {
+        case .pdf:
+            return .init(url: url, content: .pdf(url, nil))
+
+        case .replica:
+            let data = try LegacyText.palm(
+                Data(contentsOf: url, options: .mappedIfSafe),
+                replica: true
+            )
+            return .init(url: url, content: .pdf(url, data))
+
+        case .text:
+            return .init(
+                url: url,
+                content: .text(decode(try Data(contentsOf: url, options: .mappedIfSafe)))
+            )
+
         case .palm:
-            do{return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))}
-            catch{try Task.checkCancellation();return .init(url:url,content:.text(decode(try LegacyText.palm(Data(contentsOf:url,options:.mappedIfSafe)))))}
-        case .tcr:return .init(url:url,content:.text(decode(try LegacyText.tcr(Data(contentsOf:url,options:.mappedIfSafe)))))
-        case .book,.markdown,.html:return .init(url:url,content:.pages(try Pages(url,format:.mupdf)))
-        case .chm:return .init(url:url,content:.chm(try CHMSource(url)))
+            do {
+                return .init(url: url, content: .pages(try Pages(url, format: .mupdf)))
+            } catch {
+                try Task.checkCancellation()
+                let data = try LegacyText.palm(Data(contentsOf: url, options: .mappedIfSafe))
+                return .init(url: url, content: .text(decode(data)))
+            }
+
+        case .tcr:
+            let data = try LegacyText.tcr(Data(contentsOf: url, options: .mappedIfSafe))
+            return .init(url: url, content: .text(decode(data)))
+
+        case .book, .markdown, .html:
+            return .init(url: url, content: .pages(try Pages(url, format: .mupdf)))
+
+        case .chm:
+            return .init(url: url, content: .chm(try CHMSource(url)))
+
         case .lit:
-            let (temp,root)=try LitConverter.convert(url);return .init(url:url,content:.pages(try Pages(root,format:.mupdf)),temporary:temp)
-        case .image,.comic,.mupdf,.djvu:return .init(url:url,content:.pages(try Pages(url,format:format)))
+            let (temporary, root) = try LitConverter.convert(url)
+            return .init(
+                url: url,
+                content: .pages(try Pages(root, format: .mupdf)),
+                temporary: temporary
+            )
+
+        case .image, .comic, .mupdf, .djvu:
+            return .init(url: url, content: .pages(try Pages(url, format: format)))
+
         case .postscript:
-            let candidates=["/opt/homebrew/bin/gs","/usr/local/bin/gs","/usr/bin/gs"];guard let gs=candidates.first(where:{FileManager.default.isExecutableFile(atPath:$0)})else{throw ReadError("PostScript/PJL needs Ghostscript.")}
-            let temp=try TemporaryDirectory(),out=temp.url.appendingPathComponent("document.pdf"),input:URL
-            if url.lastPathComponent.lowercased().hasSuffix(".ps.gz"){
-                input=temp.url.appendingPathComponent("document.ps");let p=Process();p.executableURL=URL(fileURLWithPath:"/usr/bin/gzip");p.arguments=["-dc",url.path];let h=FileManager.default.createFile(atPath:input.path,contents:nil) ? try FileHandle(forWritingTo:input):nil;guard let h else{throw ReadError("Cannot create temporary PostScript")};defer{try? h.close()};p.standardOutput=h;try runLeafProcess(p);try h.close();guard p.terminationStatus==0 else{throw ReadError("Cannot decompress PostScript")}
-            }else{input=url}
-            let p=Process();p.executableURL=URL(fileURLWithPath:gs);p.arguments=["-dSAFER","-dBATCH","-dNOPAUSE","-sDEVICE=pdfwrite","-sOutputFile="+out.path,"-f",input.path];p.standardOutput=FileHandle.nullDevice;p.standardError=FileHandle.nullDevice;try runLeafProcess(p);guard p.terminationStatus==0 else{throw ReadError("Ghostscript could not convert this file.")};return .init(url:url,content:.pdf(out,nil),temporary:temp)
-        default:throw ReadError("Unsupported document: \(url.lastPathComponent)")
+            return try openPostScript(url)
+
+        default:
+            throw ReadError("Unsupported document: \(url.lastPathComponent)")
         }
     }
-    static func decode(_ d:Data)->String{if let s=String(data:d,encoding:.utf8){return s};var s:String?;_=NSString.stringEncoding(for:d,encodingOptions:[:],convertedString:&s,usedLossyConversion:nil);return s ?? String(decoding:d,as:UTF8.self)}
+
+    static func decode(_ data: Data) -> String {
+        if let string = String(data: data, encoding: .utf8) {
+            return string
+        }
+
+        var converted: String?
+        _ = NSString.stringEncoding(
+            for: data,
+            encodingOptions: [:],
+            convertedString: &converted,
+            usedLossyConversion: nil
+        )
+        return converted ?? String(decoding: data, as: UTF8.self)
+    }
+
+    private static func openPostScript(_ url: URL) throws -> ReadingDocument {
+        let candidates = ["/opt/homebrew/bin/gs", "/usr/local/bin/gs", "/usr/bin/gs"]
+        guard let ghostscript = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) else {
+            throw ReadError("PostScript/PJL needs Ghostscript.")
+        }
+
+        let temporary = try TemporaryDirectory()
+        let output = temporary.url.appendingPathComponent("document.pdf")
+        let input: URL
+
+        if url.lastPathComponent.lowercased().hasSuffix(".ps.gz") {
+            input = temporary.url.appendingPathComponent("document.ps")
+
+            guard FileManager.default.createFile(atPath: input.path, contents: nil) else {
+                throw ReadError("Cannot create temporary PostScript")
+            }
+            let handle = try FileHandle(forWritingTo: input)
+            defer { try? handle.close() }
+
+            let gzip = Process()
+            gzip.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+            gzip.arguments = ["-dc", url.path]
+            gzip.standardOutput = handle
+
+            try runLeafProcess(gzip)
+            guard gzip.terminationStatus == 0 else {
+                throw ReadError("Cannot decompress PostScript")
+            }
+        } else {
+            input = url
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ghostscript)
+        process.arguments = [
+            "-dSAFER",
+            "-dBATCH",
+            "-dNOPAUSE",
+            "-sDEVICE=pdfwrite",
+            "-sOutputFile=" + output.path,
+            "-f",
+            input.path
+        ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        try runLeafProcess(process)
+        guard process.terminationStatus == 0 else {
+            throw ReadError("Ghostscript could not convert this file.")
+        }
+
+        return .init(url: url, content: .pdf(output, nil), temporary: temporary)
+    }
 }
 #endif
