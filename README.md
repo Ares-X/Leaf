@@ -1,6 +1,6 @@
 # Sumra
 
-A small, native macOS reader. Open a file, read it, close it.
+Sumra is a small, native macOS reader inspired by SumatraPDF. Open a file, read it, close it.
 
 **Engine integration in progress — not a release or a claim of tested SumatraPDF parity.**
 The current source replaces the prototype's hand-written ZIP/EPUB/FB2 parsers and
