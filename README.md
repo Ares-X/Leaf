@@ -1,6 +1,6 @@
-# Leaf
+# Sumra
 
-A small, native macOS reader. Open a file, read it, close it.
+Sumra is a small, native macOS reader inspired by SumatraPDF. Open a file, read it, close it.
 
 **Engine integration in progress — not a release or a claim of tested SumatraPDF parity.**
 The current source replaces the prototype's hand-written ZIP/EPUB/FB2 parsers and
@@ -64,7 +64,7 @@ not executed. Fixed-layout EPUB and CHM still need sample testing.
   OCR, barcode and office export components. Required fonts/codecs are not blindly removed.
 - No full-document PDF conversion for DjVu/XPS; only PS uses a temporary conversion.
 - Solid RAR/7z archives still have their inherent seek/decompression cost.
-- WebKit has its own process/memory cost. Measure it with the app, not just Leaf's main process.
+- WebKit has its own process/memory cost. Measure it with the app, not just Sumra's main process.
 
 ## Build on macOS
 
@@ -76,7 +76,7 @@ No GitHub Actions jobs run automatically.
 # Native decoder build dependencies; not required by users of a bundled app.
 brew install pkgconf djvulibre chmlib jpeg-xl convertlit
 ./scripts/build-app.sh
-open dist/Leaf.app
+open dist/Sumra.app
 ```
 
 Foliate's eight CHM renderer/search modules are vendored at the pinned revision. The first full build only fetches/builds the pinned MuPDF source and bundles linked decoder dylibs. Homebrew decoder versions are development inputs and are not yet pinned for redistribution. The result is a local ad-hoc signed bundle. The build script runs portable tests, validates Info.plist and icon output, then performs a strict deep code-signature verification. It is **not a notarized or redistribution-audited release**. A public binary
@@ -106,6 +106,6 @@ Installed size, cold start, first page and total memory remain **unmeasured**. T
 
 ## License
 
-New Leaf code: **AGPL-3.0-or-later**. The full MuPDF build must not be represented
+New Sumra code: **AGPL-3.0-or-later**. The full MuPDF build must not be represented
 as MIT-only. Earlier Leaf MIT notices and the Sumatra BSD notice are retained;
 upstream libraries keep their licenses. See [THIRD_PARTY.md](THIRD_PARTY.md).

@@ -12,16 +12,16 @@ fi
 swift test
 swift build -c release -Xswiftc -Osize -Xlinker -dead_strip
 BIN="$(swift build -c release --show-bin-path)"
-APP="$PWD/dist/Leaf.app/Contents"
-rm -rf "$PWD/dist/Leaf.app"
+APP="$PWD/dist/Sumra.app/Contents"
+rm -rf "$PWD/dist/Sumra.app"
 mkdir -p "$APP/MacOS" "$APP/Resources"
 
-LIGHT_ICONSET="$PWD/build/Surma-Light.iconset"
-DARK_ICONSET="$PWD/build/Surma-Dark.iconset"
+LIGHT_ICONSET="$PWD/build/Sumra-Light.iconset"
+DARK_ICONSET="$PWD/build/Sumra-Dark.iconset"
 swift scripts/make-icon.swift "$LIGHT_ICONSET" light
 swift scripts/make-icon.swift "$DARK_ICONSET" dark
-iconutil -c icns "$LIGHT_ICONSET" -o "$APP/Resources/Surma-Light.icns"
-iconutil -c icns "$DARK_ICONSET" -o "$APP/Resources/Surma-Dark.icns"
+iconutil -c icns "$LIGHT_ICONSET" -o "$APP/Resources/Sumra-Light.icns"
+iconutil -c icns "$DARK_ICONSET" -o "$APP/Resources/Sumra-Dark.icns"
 
 cp "$BIN/Leaf" "$APP/MacOS/Leaf"
 strip -x "$APP/MacOS/Leaf"
@@ -31,5 +31,5 @@ if [ "$CORE" != --core ]; then mkdir -p "$APP/Resources/Tools"; cp "$(command -v
 python3 scripts/bundle.py "$APP" ${CORE:+"$CORE"}
 codesign --force --sign - "$APP/.."
 codesign --verify --deep --strict "$APP/.."
-echo "Built dist/Leaf.app (ad-hoc signed local development build, not notarized)."
-du -sh dist/Leaf.app
+echo "Built dist/Sumra.app (ad-hoc signed local development build, not notarized)."
+du -sh dist/Sumra.app

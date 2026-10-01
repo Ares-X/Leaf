@@ -50,7 +50,7 @@ struct ReaderView: View {
                 .padding(.vertical, 4)
             }
         }
-        .navigationTitle(state.document?.url.lastPathComponent ?? "Leaf")
+        .navigationTitle(state.document?.url.lastPathComponent ?? "Sumra")
         .background(DocumentProxy(url: state.document?.url))
         .preferredColorScheme(state.theme == "dark" ? .dark : state.theme == "light" ? .light : nil)
         .onChange(of: colorScheme) { _ in
@@ -325,7 +325,7 @@ private struct WelcomeView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 72, height: 72)
-            Text("Leaf")
+            Text("Sumra")
                 .font(.largeTitle.weight(.semibold))
             Text("A fast, focused document reader for macOS")
                 .foregroundStyle(.secondary)
