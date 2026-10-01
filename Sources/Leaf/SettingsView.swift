@@ -2,6 +2,7 @@
 import SwiftUI
 
 struct SettingsView:View{
+    @AppStorage("appIcon") private var appIcon="light"
     @AppStorage("theme") private var theme="system"
     @AppStorage("flow") private var flow="paged"
     @AppStorage("fit") private var fit="page"
@@ -13,6 +14,12 @@ struct SettingsView:View{
     @AppStorage("margin") private var margin=32.0
     var body:some View{Form{
         Section("Appearance"){
+            Picker("App icon",selection:$appIcon){
+                Label("Light",systemImage:"sun.max").tag("light")
+                Label("Dark",systemImage:"moon").tag("dark")
+            }
+            .pickerStyle(.segmented)
+            .onChange(of:appIcon){AppIcon.apply($0)}
             Picker("Default theme",selection:$theme){Text("System").tag("system");Text("Light").tag("light");Text("Dark").tag("dark")}
             Picker("Default fit",selection:$fit){Text("Fit Page").tag("page");Text("Fit Width").tag("width");Text("Actual Size").tag("actual")}
         }
