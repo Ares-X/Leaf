@@ -90,6 +90,7 @@ private struct WindowTabs: NSViewRepresentable {
 struct LeafApp: App {
     init() {
         NSWindow.allowsAutomaticWindowTabbing = true
+        AppIcon.apply(UserDefaults.standard.string(forKey: "appIcon") ?? "light")
     }
 
     var body: some Scene {
