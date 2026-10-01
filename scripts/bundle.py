@@ -85,7 +85,7 @@ suffixes = [values for kind, values in groups if kind not in disabled]
 if core:
     suffixes = [" ".join(x for x in values.split() if x != "jxl") for values in suffixes]
 
-icon = contents / "Resources" / "Leaf.icns"
+icon = contents / "Resources" / "Surma-Light.icns"
 info = dict(
     CFBundleName="Leaf", CFBundleDisplayName="Leaf", CFBundleExecutable="Leaf",
     CFBundleIdentifier="dev.aresx.leaf", CFBundlePackageType="APPL",
@@ -98,7 +98,7 @@ info = dict(
         CFBundleTypeExtensions=sorted(set(" ".join(suffixes).split()))
     )],
     LSSupportsOpeningDocumentsInPlace=True,
-    **({"CFBundleIconFile": "Leaf.icns"} if icon.exists() else {})
+    **({"CFBundleIconFile": "Surma-Light.icns"} if icon.exists() else {})
 )
 with (contents / "Info.plist").open("wb") as f:
     plistlib.dump(info, f)
