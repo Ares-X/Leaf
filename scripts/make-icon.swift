@@ -4,7 +4,7 @@ import Foundation
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 let out = URL(
-    fileURLWithPath: arguments.first ?? "build/Surma-Light.iconset",
+    fileURLWithPath: arguments.first ?? "build/Sumra-Light.iconset",
     isDirectory: true
 )
 let variant = arguments.dropFirst().first ?? "light"
@@ -58,12 +58,12 @@ func draw(_ pixels: Int, to url: URL) throws {
         bytesPerRow: 0,
         bitsPerPixel: 0
     ) else {
-        throw NSError(domain: "SurmaIcon", code: 1)
+        throw NSError(domain: "SumraIcon", code: 1)
     }
 
     rep.size = NSSize(width: size, height: size)
     guard let context = NSGraphicsContext(bitmapImageRep: rep) else {
-        throw NSError(domain: "SurmaIcon", code: 2)
+        throw NSError(domain: "SumraIcon", code: 2)
     }
 
     NSGraphicsContext.saveGraphicsState()
@@ -111,7 +111,7 @@ func draw(_ pixels: Int, to url: URL) throws {
     NSGraphicsContext.restoreGraphicsState()
 
     guard let data = rep.representation(using: .png, properties: [.compressionFactor: 1]) else {
-        throw NSError(domain: "SurmaIcon", code: 3)
+        throw NSError(domain: "SumraIcon", code: 3)
     }
     try data.write(to: url)
 }
