@@ -15,9 +15,14 @@ BIN="$(swift build -c release --show-bin-path)"
 APP="$PWD/dist/Leaf.app/Contents"
 rm -rf "$PWD/dist/Leaf.app"
 mkdir -p "$APP/MacOS" "$APP/Resources"
-ICONSET="$PWD/build/Leaf.iconset"
-swift scripts/make-icon.swift "$ICONSET"
-iconutil -c icns "$ICONSET" -o "$APP/Resources/Leaf.icns"
+
+LIGHT_ICONSET="$PWD/build/Surma-Light.iconset"
+DARK_ICONSET="$PWD/build/Surma-Dark.iconset"
+swift scripts/make-icon.swift "$LIGHT_ICONSET" light
+swift scripts/make-icon.swift "$DARK_ICONSET" dark
+iconutil -c icns "$LIGHT_ICONSET" -o "$APP/Resources/Surma-Light.icns"
+iconutil -c icns "$DARK_ICONSET" -o "$APP/Resources/Surma-Dark.icns"
+
 cp "$BIN/Leaf" "$APP/MacOS/Leaf"
 strip -x "$APP/MacOS/Leaf"
 # Keep one resource copy. CHMReader uses this path in an app, Bundle.module in swift run.
