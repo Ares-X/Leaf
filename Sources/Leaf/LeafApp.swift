@@ -94,7 +94,7 @@ struct LeafApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Leaf", id: "reader", for: WindowPayload.self) { $payload in
+        WindowGroup("Sumra", id: "reader", for: WindowPayload.self) { $payload in
             ReaderWindow(payload: $payload)
         } defaultValue: {
             WindowPayload()
@@ -112,7 +112,7 @@ struct LeafApp: App {
 @main
 enum LeafCLI {
     static func main() {
-        print("Leaf's UI requires macOS. Run swift test for portable core checks.")
+        print("Sumra's UI requires macOS. Run swift test for portable core checks.")
     }
 }
 #endif
