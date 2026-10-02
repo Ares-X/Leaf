@@ -16,10 +16,30 @@ APP="$PWD/dist/Sumra.app/Contents"
 rm -rf "$PWD/dist/Sumra.app"
 mkdir -p "$APP/MacOS" "$APP/Resources"
 
+ICON_SOURCE="$PWD/Assets/AppIcon"
 LIGHT_ICONSET="$PWD/build/Sumra-Light.iconset"
 DARK_ICONSET="$PWD/build/Sumra-Dark.iconset"
-swift scripts/make-icon.swift "$LIGHT_ICONSET" light
-swift scripts/make-icon.swift "$DARK_ICONSET" dark
+
+make_iconset() {
+    local source="$1"
+    local output="$2"
+    [ -f "$source" ] || { echo "Missing app icon source: $source" >&2; exit 1; }
+    rm -rf "$output"
+    mkdir -p "$output"
+    sips -z 16 16 "$source" --out "$output/icon_16x16.png" >/dev/null
+    sips -z 32 32 "$source" --out "$output/icon_16x16@2x.png" >/dev/null
+    sips -z 32 32 "$source" --out "$output/icon_32x32.png" >/dev/null
+    sips -z 64 64 "$source" --out "$output/icon_32x32@2x.png" >/dev/null
+    sips -z 128 128 "$source" --out "$output/icon_128x128.png" >/dev/null
+    sips -z 256 256 "$source" --out "$output/icon_128x128@2x.png" >/dev/null
+    sips -z 256 256 "$source" --out "$output/icon_256x256.png" >/dev/null
+    sips -z 512 512 "$source" --out "$output/icon_256x256@2x.png" >/dev/null
+    sips -z 512 512 "$source" --out "$output/icon_512x512.png" >/dev/null
+    cp "$source" "$output/icon_512x512@2x.png"
+}
+
+make_iconset "$ICON_SOURCE/Sumra-Light.png" "$LIGHT_ICONSET"
+make_iconset "$ICON_SOURCE/Sumra-Dark.png" "$DARK_ICONSET"
 iconutil -c icns "$LIGHT_ICONSET" -o "$APP/Resources/Sumra-Light.icns"
 iconutil -c icns "$DARK_ICONSET" -o "$APP/Resources/Sumra-Dark.icns"
 
