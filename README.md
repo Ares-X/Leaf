@@ -69,6 +69,7 @@ not executed. Fixed-layout EPUB and CHM still need sample testing.
 ## Build on macOS
 
 A macOS SDK / Xcode command-line toolchain is required for the GUI.
+The selected light/dark app icon artwork is committed as vector masters in `Assets/AppIcon`; packaging only rasterizes those assets and does not redraw the logo geometry.
 The deployment target is 13.0; the oldest OS/WebKit combination is not yet tested.
 No GitHub Actions jobs run automatically.
 

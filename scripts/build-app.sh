@@ -16,10 +16,12 @@ APP="$PWD/dist/Sumra.app/Contents"
 rm -rf "$PWD/dist/Sumra.app"
 mkdir -p "$APP/MacOS" "$APP/Resources"
 
+ICON_SOURCE="$PWD/Assets/AppIcon"
 LIGHT_ICONSET="$PWD/build/Sumra-Light.iconset"
 DARK_ICONSET="$PWD/build/Sumra-Dark.iconset"
-swift scripts/make-icon.swift "$LIGHT_ICONSET" light
-swift scripts/make-icon.swift "$DARK_ICONSET" dark
+
+swift scripts/rasterize-icon.swift "$ICON_SOURCE/Sumra-Light.pdf" "$LIGHT_ICONSET"
+swift scripts/rasterize-icon.swift "$ICON_SOURCE/Sumra-Dark.pdf" "$DARK_ICONSET"
 iconutil -c icns "$LIGHT_ICONSET" -o "$APP/Resources/Sumra-Light.icns"
 iconutil -c icns "$DARK_ICONSET" -o "$APP/Resources/Sumra-Dark.icns"
 
